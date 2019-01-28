@@ -39,7 +39,10 @@ _, axes = plt.subplots(nrows=5, ncols=5)
 
 for i in range(25):
 
-    axes[i // 5, i % 5].imshow(samples[i])
+    axis = axes[i // 5, i % 5]
+
+    axis.imshow(samples[i], vmin=0, vmax=1)
+    axis.axis("off")
 
 plt.show()
 
