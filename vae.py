@@ -1,6 +1,5 @@
 from enum import Enum
-from operator import mul
-from functools import reduce
+import numpy as np
 import tensorflow as tf
 import utils
 
@@ -18,17 +17,13 @@ class VAE:
         assert loss_type in self.LossType
 
         self.input_shape = input_shape
-        self.flat_input_shape = reduce(mul, self.input_shape, 1)
+        self.flat_input_shape = int(np.prod(self.input_shape))
         self.encoder_neurons = encoder_neurons
         self.decoder_neurons = decoder_neurons
         self.latent_space_size = latent_space_size
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
-
-        self.build_placeholders()
-        self.build_network()
-        self.build_training()
 
         self.input_pl = None
         self.input_flat_t = None
@@ -47,6 +42,32 @@ class VAE:
         self.loss_t = None
         self.step_op = None
         self.session = None
+
+        self.build_placeholders()
+        self.build_network()
+        self.build_training()
+
+    def predict(self, num_samples):
+
+        flat_outputs = self.session.run(self.output_t, feed_dict={
+            self.mu_t: np.zeros((num_samples, self.latent_space_size), dtype=np.float32),
+            self.sd_t: np.ones((num_samples, self.latent_space_size), dtype=np.float32)
+
+        })
+
+        outputs = np.reshape(flat_outputs, (num_samples, *self.input_shape))
+
+        return outputs
+
+    def train(self, samples):
+
+        _, loss, output_loss, kl_loss = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.kl_loss_t], feed_dict={
+                self.input_pl: samples
+            }
+        )
+
+        return loss, output_loss, kl_loss
 
     def build_placeholders(self):
 
@@ -99,16 +120,19 @@ class VAE:
     def build_training(self):
 
         if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
-            self.output_loss_t = tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_flat_t,
-                                                                 logits=self.output_t)
+            self.output_loss_t = tf.reduce_mean(
+                tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_flat_t, logits=self.output_t)
+            )
         else:
-            self.output_loss_t = tf.losses.mean_squared_error(labels=self.input_flat_t, predictions=self.output_t)
+            self.output_loss_t = tf.reduce_mean(
+                tf.losses.mean_squared_error(labels=self.input_flat_t, predictions=self.output_t)
+            )
 
         self.kl_loss_t = tf.reduce_mean(tf.reduce_sum(self.kl_divergence_t, axis=1))
 
         self.loss_t = self.output_loss_t + self.kl_loss_t
 
-        self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 
     def start_session(self):
 
