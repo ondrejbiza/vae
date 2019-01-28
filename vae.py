@@ -42,6 +42,7 @@ class VAE:
         self.noise_t = None
         self.sd_noise_t = None
         self.sample_t = None
+        self.logits_t = None
         self.output_t = None
         self.output_loss_t = None
         self.loss_t = None
@@ -134,7 +135,8 @@ class VAE:
                             kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
                         )
 
-            self.output_t = x
+            self.logits_t = x
+            self.output_t = tf.nn.sigmoid(self.logits_t)
 
     def build_training(self):
 
@@ -142,7 +144,7 @@ class VAE:
 
             if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
                 self.output_loss_t = tf.reduce_mean(
-                    tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_flat_t, logits=self.output_t)
+                    tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_flat_t, logits=self.logits_t)
                 )
             else:
                 self.output_loss_t = tf.reduce_mean(
