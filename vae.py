@@ -38,6 +38,7 @@ class VAE:
         self.mean_sq_t = None
         self.kl_divergence_t = None
         self.kl_loss_t = None
+        self.reg_loss_t = None
         self.noise_t = None
         self.sd_noise_t = None
         self.sample_t = None
@@ -69,13 +70,13 @@ class VAE:
 
     def train(self, samples):
 
-        _, loss, output_loss, kl_loss = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.kl_loss_t], feed_dict={
+        _, loss, output_loss, kl_loss, reg_loss = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.kl_loss_t, self.reg_loss_t], feed_dict={
                 self.input_pl: samples
             }
         )
 
-        return loss, output_loss, kl_loss
+        return loss, output_loss, kl_loss, reg_loss
 
     def build_placeholders(self):
 
@@ -150,7 +151,9 @@ class VAE:
 
             self.kl_loss_t = tf.reduce_mean(tf.reduce_sum(self.kl_divergence_t, axis=1))
 
-            self.loss_t = self.output_loss_t + self.kl_loss_t
+            self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+
+            self.loss_t = self.output_loss_t + self.kl_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 

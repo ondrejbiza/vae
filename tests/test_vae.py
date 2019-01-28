@@ -1,7 +1,10 @@
+import os
 import unittest
 import numpy as np
 import tensorflow as tf
 from vae import VAE
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 class TestVAE(unittest.TestCase):
