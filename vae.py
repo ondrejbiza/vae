@@ -32,7 +32,7 @@ class VAE:
         self.input_pl = None
         self.input_flat_t = None
         self.mu_t = None
-        self.log_sd_t = None
+        self.log_var_t = None
         self.sd_t = None
         self.var_t = None
         self.mean_sq_t = None
@@ -106,16 +106,16 @@ class VAE:
                     x, self.latent_space_size, activation=None,
                     kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
                 )
-                self.log_sd_t = tf.layers.dense(
+                self.log_var_t = tf.layers.dense(
                     x, self.latent_space_size, activation=None,
                     kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
                 )
 
-                self.sd_t = tf.exp(self.log_sd_t)
-                self.var_t = self.sd_t * self.sd_t
-                self.mean_sq_t = self.mu_t * self.mu_t
+                self.var_t = tf.exp(self.log_var_t)
+                self.sd_t = tf.sqrt(self.var_t)
+                self.mean_sq_t = tf.square(self.mu_t)
 
-                self.kl_divergence_t = 0.5 * self.mean_sq_t + 0.5 * self.var_t - 1.0 * self.log_sd_t - 0.5
+                self.kl_divergence_t = 0.5 * (self.mean_sq_t + self.var_t - self.log_var_t - 1.0)
 
                 self.noise_t = tf.random.normal(
                     shape=(tf.shape(self.mu_t)[0], self.latent_space_size), mean=0, stddev=1.0
@@ -144,11 +144,25 @@ class VAE:
 
             if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
                 self.output_loss_t = tf.reduce_mean(
-                    tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_flat_t, logits=self.logits_t)
+                    tf.reduce_sum(
+                        tf.losses.sigmoid_cross_entropy(
+                            multi_class_labels=self.input_flat_t, logits=self.logits_t,
+                            reduction=tf.losses.Reduction.NONE
+                        ),
+                        axis=1
+                    ),
+                    axis=0
                 )
             else:
                 self.output_loss_t = tf.reduce_mean(
-                    tf.losses.mean_squared_error(labels=self.input_flat_t, predictions=self.output_t)
+                    tf.reduce_sum(
+                        tf.losses.mean_squared_error(
+                            labels=self.input_flat_t, logits=self.logits_t,
+                            predictions=tf.losses.Reduction.NONE
+                        ),
+                        axis=1
+                    ),
+                    axis=0
                 )
 
             self.kl_loss_t = tf.reduce_mean(tf.reduce_sum(self.kl_divergence_t, axis=1))
