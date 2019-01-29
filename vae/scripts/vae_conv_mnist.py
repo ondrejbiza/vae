@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 import tensorflow as tf
-from .. import vae
+from .. import vae_conv
 
 ((train_data, train_labels), (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data()
 train_data = train_data / 255.0
@@ -12,7 +12,10 @@ eval_data = eval_data / 255.0
 train_data, train_labels = shuffle(train_data, train_labels)
 eval_data, eval_labels = shuffle(eval_data, eval_labels)
 
-model = vae.VAE([28, 28], [1000, 500, 250], [250, 500, 28 * 28], 30, vae.VAE.LossType.SIGMOID_CROSS_ENTROPY, 0.0005, 0.001)
+model = vae_conv.VAE(
+    [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
+    32, vae_conv.VAE.LossType.SIGMOID_CROSS_ENTROPY, 0.0005, 0.001
+)
 
 model.start_session()
 
@@ -22,7 +25,7 @@ epoch_size = len(train_data) // batch_size
 losses = collections.defaultdict(list)
 epoch_losses = collections.defaultdict(list)
 
-for train_step in range(60000):
+for train_step in range(10000):
 
     epoch_step = train_step % epoch_size
 
