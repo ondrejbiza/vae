@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 import tensorflow as tf
-from vae import VAE
+from .. import vae
 
 ((train_data, train_labels), (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data()
 train_data = train_data / 255.0
@@ -12,7 +12,7 @@ eval_data = eval_data / 255.0
 train_data, train_labels = shuffle(train_data, train_labels)
 eval_data, eval_labels = shuffle(eval_data, eval_labels)
 
-model = VAE([28, 28], [1000, 500, 250], [250, 500, 28 * 28], 30, VAE.LossType.SIGMOID_CROSS_ENTROPY, 0.0005, 0.001)
+model = vae.VAE([28, 28], [1000, 500, 250], [250, 500, 28 * 28], 30, vae.VAE.LossType.SIGMOID_CROSS_ENTROPY, 0.0005, 0.001)
 
 model.start_session()
 

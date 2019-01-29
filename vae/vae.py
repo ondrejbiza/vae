@@ -2,7 +2,7 @@ import os
 from enum import Enum
 import numpy as np
 import tensorflow as tf
-import utils
+from . import utils
 
 
 class VAE:
