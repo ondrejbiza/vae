@@ -160,14 +160,11 @@ class VAE:
 
                 for idx in range(len(self.decoder_filters)):
                     with tf.variable_scope("conv{:d}".format(idx + 1)):
-                        print(x)
                         x = tf.layers.conv2d_transpose(
                             x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
                             padding="VALID", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
                             kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
                         )
-                        print(x)
-                        print()
 
             self.logits_t = x
             self.flat_logits_t = tf.layers.flatten(x)

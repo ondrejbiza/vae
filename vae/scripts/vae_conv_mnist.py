@@ -12,6 +12,8 @@ eval_data = eval_data / 255.0
 train_data, train_labels = shuffle(train_data, train_labels)
 eval_data, eval_labels = shuffle(eval_data, eval_labels)
 
+# the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
+# in all fully-connected and convolutional layers
 model = vae_conv.VAE(
     [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
     32, vae_conv.VAE.LossType.SIGMOID_CROSS_ENTROPY, 0.0005, 0.001
@@ -25,7 +27,7 @@ epoch_size = len(train_data) // batch_size
 losses = collections.defaultdict(list)
 epoch_losses = collections.defaultdict(list)
 
-for train_step in range(10000):
+for train_step in range(60000):
 
     epoch_step = train_step % epoch_size
 
