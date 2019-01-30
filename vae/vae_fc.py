@@ -117,7 +117,7 @@ class VAE:
 
                 self.kl_divergence_t = 0.5 * (self.mean_sq_t + self.var_t - self.log_var_t - 1.0)
 
-                self.noise_t = tf.random.normal(
+                self.noise_t = tf.random_normal(
                     shape=(tf.shape(self.mu_t)[0], self.latent_space_size), mean=0, stddev=1.0
                 )
 
