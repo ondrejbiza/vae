@@ -205,9 +205,15 @@ class VAE:
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 
-    def start_session(self):
+    def start_session(self, gpu_memory=None):
 
-        self.session = tf.Session()
+        gpu_options = None
+        if gpu_memory is not None:
+            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory)
+
+        tf_config = tf.ConfigProto(gpu_options=gpu_options)
+
+        self.session = tf.Session(config=tf_config)
         self.session.run(tf.global_variables_initializer())
 
     def stop_session(self):
