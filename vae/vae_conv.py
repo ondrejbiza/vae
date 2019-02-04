@@ -168,7 +168,11 @@ class VAE:
 
             self.logits_t = x
             self.flat_logits_t = tf.layers.flatten(x)
-            self.output_t = tf.nn.sigmoid(self.logits_t)
+
+            if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
+                self.output_t = tf.nn.sigmoid(self.logits_t)
+            else:
+                self.output_t = self.logits_t
 
     def build_training(self):
 
