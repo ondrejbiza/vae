@@ -18,7 +18,7 @@ model = vae_conv.VAE(
     [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
     32, vae_conv.VAE.LossType.SIGMOID_CROSS_ENTROPY, 0.0005, 0.001
 )
-
+model.build_all()
 model.start_session()
 
 batch_size = 100
@@ -27,7 +27,7 @@ epoch_size = len(train_data) // batch_size
 losses = collections.defaultdict(list)
 epoch_losses = collections.defaultdict(list)
 
-for train_step in range(60000):
+for train_step in range(1001):
 
     epoch_step = train_step % epoch_size
 
