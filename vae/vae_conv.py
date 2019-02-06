@@ -60,6 +60,25 @@ class VAE:
         self.session = None
         self.saver = None
 
+    def encode(self, inputs, batch_size):
+
+        num_steps = int(np.ceil(inputs.shape[0] / batch_size))
+        encodings = []
+
+        for step_idx in range(num_steps):
+
+            batch_slice = np.index_exp[step_idx * batch_size:(step_idx + 1) * batch_size]
+
+            tmp_encoding = self.session.run(self.sample_t, feed_dict={
+                self.input_pl: inputs[batch_slice]
+            })
+
+            encodings.append(tmp_encoding)
+
+        encodings = np.concatenate(encodings, axis=0)
+
+        return encodings
+
     def predict(self, num_samples):
 
         outputs = self.session.run(self.output_t, feed_dict={
