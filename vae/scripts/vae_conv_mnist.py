@@ -24,6 +24,7 @@ def main(args):
         disable_kl_loss=args.disable_kl_loss
     )
 
+    model.build_all()
     model.start_session()
 
     batch_size = 100

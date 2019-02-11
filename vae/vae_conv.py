@@ -59,14 +59,26 @@ class VAE:
         self.loss_t = None
         self.step_op = None
         self.session = None
+        self.saver = None
 
-        self.build_placeholders()
-        self.build_network()
-        self.build_training()
+    def encode(self, inputs, batch_size):
 
-        self.saver = tf.train.Saver(
-            var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.MODEL_NAMESPACE)
-        )
+        num_steps = int(np.ceil(inputs.shape[0] / batch_size))
+        encodings = []
+
+        for step_idx in range(num_steps):
+
+            batch_slice = np.index_exp[step_idx * batch_size:(step_idx + 1) * batch_size]
+
+            tmp_encoding = self.session.run(self.sample_t, feed_dict={
+                self.input_pl: inputs[batch_slice]
+            })
+
+            encodings.append(tmp_encoding)
+
+        encodings = np.concatenate(encodings, axis=0)
+
+        return encodings
 
     def predict(self, num_samples):
 
@@ -88,88 +100,119 @@ class VAE:
 
         return loss, output_loss, kl_loss, reg_loss
 
+    def build_all(self):
+
+        self.build_placeholders()
+        self.build_network()
+        self.build_training()
+
+        self.saver = tf.train.Saver(
+            var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self.MODEL_NAMESPACE)
+        )
+
     def build_placeholders(self):
 
         self.input_pl = tf.placeholder(tf.float32, shape=(None, *self.input_shape), name="input_pl")
+        self.input_flat_t = tf.reshape(self.input_pl, shape=(tf.shape(self.input_pl)[0], self.flat_input_shape))
 
     def build_network(self):
 
         with tf.variable_scope(self.MODEL_NAMESPACE):
 
-            self.input_flat_t = tf.reshape(self.input_pl, shape=(tf.shape(self.input_pl)[0], self.flat_input_shape))
-
             # encoder
-            x = tf.expand_dims(self.input_pl, axis=-1)
-
-            with tf.variable_scope("encoder"):
-
-                for idx in range(len(self.encoder_filters)):
-                    with tf.variable_scope("conv{:d}".format(idx + 1)):
-                        x = tf.layers.conv2d(
-                            x, self.encoder_filters[idx], self.encoder_filter_sizes[idx], self.encoder_strides[idx],
-                            padding="SAME", activation=tf.nn.relu,
-                            kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                        )
-
-                x = tf.layers.flatten(x)
-
-                for idx, neurons in enumerate(self.encoder_neurons):
-                    with tf.variable_scope("fc{:d}".format(idx + 1)):
-                        x = tf.layers.dense(
-                            x, neurons, activation=tf.nn.relu,
-                            kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                        )
+            x = self.build_encoder(self.input_pl)
 
             # middle
-            with tf.variable_scope("middle"):
-
-                self.mu_t = tf.layers.dense(
-                    x, self.latent_space_size, activation=None,
-                    kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                )
-                self.log_var_t = tf.layers.dense(
-                    x, self.latent_space_size, activation=None,
-                    kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                )
-
-                self.var_t = tf.exp(self.log_var_t)
-                self.sd_t = tf.sqrt(self.var_t)
-                self.mean_sq_t = tf.square(self.mu_t)
-
-                self.kl_divergence_t = 0.5 * (self.mean_sq_t + self.var_t - self.log_var_t - 1.0)
-
-                self.noise_t = tf.random.normal(
-                    shape=(tf.shape(self.mu_t)[0], self.latent_space_size), mean=0, stddev=1.0
-                )
-
-                self.sd_noise_t = self.noise_t * self.sd_t
-                self.sample_t = self.mu_t + self.sd_noise_t
+            self.sample_t, self.kl_divergence_t, self.mu_t, self.sd_t = self.build_middle(x)
 
             # decoder
-            with tf.variable_scope("decoder"):
+            self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.sample_t)
 
-                x = self.sample_t
+    def build_encoder(self, input_t, share_weights=False):
 
-                for idx, neurons in enumerate(self.decoder_neurons):
-                    with tf.variable_scope("fc{:d}".format(idx + 1)):
-                        x = tf.layers.dense(
-                            x, neurons, activation=tf.nn.relu,
-                            kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                        )
+        x = tf.expand_dims(input_t, axis=-1)
 
-                x = x[:, tf.newaxis, tf.newaxis, :]
+        with tf.variable_scope("encoder", reuse=share_weights):
 
-                for idx in range(len(self.decoder_filters)):
-                    with tf.variable_scope("conv{:d}".format(idx + 1)):
-                        x = tf.layers.conv2d_transpose(
-                            x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
-                            padding="VALID", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
-                            kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                        )
+            for idx in range(len(self.encoder_filters)):
+                with tf.variable_scope("conv{:d}".format(idx + 1)):
+                    x = tf.layers.conv2d(
+                        x, self.encoder_filters[idx], self.encoder_filter_sizes[idx], self.encoder_strides[idx],
+                        padding="SAME", activation=tf.nn.relu,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                    )
 
-            self.logits_t = x
-            self.flat_logits_t = tf.layers.flatten(x)
-            self.output_t = tf.nn.sigmoid(self.logits_t)
+            x = tf.layers.flatten(x)
+
+            for idx, neurons in enumerate(self.encoder_neurons):
+                with tf.variable_scope("fc{:d}".format(idx + 1)):
+                    x = tf.layers.dense(
+                        x, neurons, activation=tf.nn.relu,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                    )
+
+        return x
+
+    def build_middle(self, input_t, share_weights=False):
+
+        with tf.variable_scope("middle", reuse=share_weights):
+
+            mu_t = tf.layers.dense(
+                input_t, self.latent_space_size, activation=None,
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+            )
+            log_var_t = tf.layers.dense(
+                input_t, self.latent_space_size, activation=None,
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+            )
+
+            var_t = tf.exp(log_var_t)
+            sd_t = tf.sqrt(var_t)
+            mean_sq_t = tf.square(mu_t)
+
+            kl_divergence_t = 0.5 * (mean_sq_t + var_t - log_var_t - 1.0)
+
+            noise_t = tf.random_normal(
+                shape=(tf.shape(mu_t)[0], self.latent_space_size), mean=0, stddev=1.0
+            )
+
+            sd_noise_t = noise_t * sd_t
+            sample_t = mu_t + sd_noise_t
+
+        return sample_t, kl_divergence_t, mu_t, sd_t
+
+    def build_decoder(self, input_t, share_weights=False):
+
+        with tf.variable_scope("decoder", reuse=share_weights):
+
+            x = input_t
+
+            for idx, neurons in enumerate(self.decoder_neurons):
+                with tf.variable_scope("fc{:d}".format(idx + 1)):
+                    x = tf.layers.dense(
+                        x, neurons, activation=tf.nn.relu,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                    )
+
+            x = x[:, tf.newaxis, tf.newaxis, :]
+
+            for idx in range(len(self.decoder_filters)):
+                with tf.variable_scope("conv{:d}".format(idx + 1)):
+                    x = tf.layers.conv2d_transpose(
+                        x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
+                        padding="VALID", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                    )
+
+        logits_t = x
+        flat_logits_t = tf.layers.flatten(x)
+
+        if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
+            output_t = tf.nn.sigmoid(logits_t)
+        else:
+            output_t = logits_t
+
+        return logits_t, flat_logits_t, output_t
 
     def build_training(self):
 
@@ -190,8 +233,8 @@ class VAE:
                 self.output_loss_t = tf.reduce_mean(
                     tf.reduce_sum(
                         tf.losses.mean_squared_error(
-                            labels=self.input_flat_t, logits=self.flat_logits_t,
-                            predictions=tf.losses.Reduction.NONE
+                            labels=self.input_flat_t, predictions=self.flat_logits_t,
+                            reduction=tf.losses.Reduction.NONE
                         ),
                         axis=1
                     ),
@@ -209,9 +252,15 @@ class VAE:
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 
-    def start_session(self):
+    def start_session(self, gpu_memory=None):
 
-        self.session = tf.Session()
+        gpu_options = None
+        if gpu_memory is not None:
+            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory)
+
+        tf_config = tf.ConfigProto(gpu_options=gpu_options)
+
+        self.session = tf.Session(config=tf_config)
         self.session.run(tf.global_variables_initializer())
 
     def stop_session(self):

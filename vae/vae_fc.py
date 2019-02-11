@@ -117,7 +117,7 @@ class VAE:
 
                 self.kl_divergence_t = 0.5 * (self.mean_sq_t + self.var_t - self.log_var_t - 1.0)
 
-                self.noise_t = tf.random.normal(
+                self.noise_t = tf.random_normal(
                     shape=(tf.shape(self.mu_t)[0], self.latent_space_size), mean=0, stddev=1.0
                 )
 
@@ -136,7 +136,11 @@ class VAE:
                         )
 
             self.logits_t = x
-            self.output_t = tf.nn.sigmoid(self.logits_t)
+
+            if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
+                self.output_t = tf.nn.sigmoid(self.logits_t)
+            else:
+                self.output_t = self.logits_t
 
     def build_training(self):
 
@@ -157,8 +161,8 @@ class VAE:
                 self.output_loss_t = tf.reduce_mean(
                     tf.reduce_sum(
                         tf.losses.mean_squared_error(
-                            labels=self.input_flat_t, logits=self.logits_t,
-                            predictions=tf.losses.Reduction.NONE
+                            labels=self.input_flat_t, predictions=self.logits_t,
+                            reduction=tf.losses.Reduction.NONE
                         ),
                         axis=1
                     ),
