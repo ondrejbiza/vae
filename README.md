@@ -13,8 +13,8 @@ python -m vae.scripts.vae_conv_mnist
 
 Samples from a fully-connected autoencoder:
 
-![samples_fc](vae/results/samples_fc.png)
+![samples_fc](vae/results/vae_fc_samples.png)
 
 Samples from a convolutional autoencoder:
 
-![samples_conv](vae/results/samples_conv.png)
+![samples_conv](vae/results/vae_conv_samples.png)

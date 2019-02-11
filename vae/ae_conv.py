@@ -5,7 +5,7 @@ import tensorflow as tf
 from . import utils
 
 
-class VAE:
+class AE:
 
     MODEL_NAMESPACE = "model"
     TRAINING_NAMESPACE = "training"
@@ -17,7 +17,7 @@ class VAE:
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
-                 weight_decay, learning_rate, disable_kl_loss=False):
+                 weight_decay, learning_rate):
 
         assert loss_type in self.LossType
         assert len(encoder_filters) == len(encoder_filter_sizes) == len(encoder_strides)
@@ -37,24 +37,14 @@ class VAE:
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
-        self.disable_kl_loss = disable_kl_loss
 
         self.input_pl = None
         self.input_flat_t = None
-        self.mu_t = None
-        self.log_var_t = None
-        self.sd_t = None
-        self.var_t = None
-        self.mean_sq_t = None
-        self.kl_divergence_t = None
-        self.kl_loss_t = None
-        self.reg_loss_t = None
-        self.noise_t = None
-        self.sd_noise_t = None
         self.sample_t = None
         self.logits_t = None
         self.flat_logits_t = None
         self.output_t = None
+        self.reg_loss_t = None
         self.output_loss_t = None
         self.loss_t = None
         self.step_op = None
@@ -71,8 +61,7 @@ class VAE:
     def predict(self, num_samples):
 
         outputs = self.session.run(self.output_t, feed_dict={
-            self.mu_t: np.zeros((num_samples, self.latent_space_size), dtype=np.float32),
-            self.sd_t: np.ones((num_samples, self.latent_space_size), dtype=np.float32)
+            self.sample_t: np.random.normal(loc=0, scale=1, size=(num_samples, self.latent_space_size))
 
         })
 
@@ -80,13 +69,13 @@ class VAE:
 
     def train(self, samples):
 
-        _, loss, output_loss, kl_loss, reg_loss = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.kl_loss_t, self.reg_loss_t], feed_dict={
+        _, loss, output_loss, reg_loss = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.reg_loss_t], feed_dict={
                 self.input_pl: samples
             }
         )
 
-        return loss, output_loss, kl_loss, reg_loss
+        return loss, output_loss, reg_loss
 
     def build_placeholders(self):
 
@@ -123,27 +112,10 @@ class VAE:
             # middle
             with tf.variable_scope("middle"):
 
-                self.mu_t = tf.layers.dense(
+                self.sample_t = tf.layers.dense(
                     x, self.latent_space_size, activation=None,
                     kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
                 )
-                self.log_var_t = tf.layers.dense(
-                    x, self.latent_space_size, activation=None,
-                    kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                )
-
-                self.var_t = tf.exp(self.log_var_t)
-                self.sd_t = tf.sqrt(self.var_t)
-                self.mean_sq_t = tf.square(self.mu_t)
-
-                self.kl_divergence_t = 0.5 * (self.mean_sq_t + self.var_t - self.log_var_t - 1.0)
-
-                self.noise_t = tf.random.normal(
-                    shape=(tf.shape(self.mu_t)[0], self.latent_space_size), mean=0, stddev=1.0
-                )
-
-                self.sd_noise_t = self.noise_t * self.sd_t
-                self.sample_t = self.mu_t + self.sd_noise_t
 
             # decoder
             with tf.variable_scope("decoder"):
@@ -198,14 +170,9 @@ class VAE:
                     axis=0
                 )
 
-            self.kl_loss_t = tf.reduce_mean(tf.reduce_sum(self.kl_divergence_t, axis=1))
-
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
-            if self.disable_kl_loss:
-                self.loss_t = self.output_loss_t + self.reg_loss_t
-            else:
-                self.loss_t = self.output_loss_t + self.kl_loss_t + self.reg_loss_t
+            self.loss_t = self.output_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 

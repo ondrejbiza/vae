@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 import tensorflow as tf
-from .. import vae_conv
+from .. import ae_conv
 
 
 def main(args):
@@ -18,10 +18,9 @@ def main(args):
 
     # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
     # in all fully-connected and convolutional layers
-    model = vae_conv.VAE(
+    model = ae_conv.AE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
-        32, vae_conv.VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        disable_kl_loss=args.disable_kl_loss
+        32, ae_conv.AE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate
     )
 
     model.start_session()
@@ -43,18 +42,16 @@ def main(args):
 
             losses["total"].append(np.mean(epoch_losses["total"]))
             losses["output"].append(np.mean(epoch_losses["output"]))
-            losses["KL divergence"].append(np.mean(epoch_losses["KL divergence"]))
             losses["regularization"].append(np.mean(epoch_losses["regularization"]))
 
             epoch_losses = collections.defaultdict(list)
 
         samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
 
-        loss, output_loss, kl_loss, reg_loss = model.train(samples)
+        loss, output_loss, reg_loss = model.train(samples)
 
         epoch_losses["total"].append(loss)
         epoch_losses["output"].append(output_loss)
-        epoch_losses["KL divergence"].append(kl_loss)
         epoch_losses["regularization"].append(reg_loss)
 
     samples = model.predict(25)
@@ -85,7 +82,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--disable-kl-loss", default=False, action="store_true")
     parser.add_argument("--num-training-steps", type=int, default=60000)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0005)
