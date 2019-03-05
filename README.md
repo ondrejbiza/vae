@@ -21,3 +21,18 @@ Samples from a fully-connected autoencoder:
 Samples from a convolutional autoencoder:
 
 ![samples_conv](vae/results/vae_conv_samples.png)
+
+Samples from a Gumbel-Softmax Categorical VAE:
+
+Categorical KL divergence:
+
+![cat_gs_vae](vae/results/gs_vae_samples_categorical_kl_500_1e4_samples.png)
+
+Relative KL divergence:
+
+![rel_gs_vae](vae/results/gs_vae_samples_relaxed_kl_500_1e4_samples.png)
+
+Straight-through:
+
+![st_gs_vae](vae/results/gs_vae_samples_straight_through_500_1e4_samples.png)
+
