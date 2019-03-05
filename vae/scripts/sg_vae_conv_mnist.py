@@ -26,7 +26,7 @@ def main(args):
 
     def get_temp(step):
         step = (step // args.temp_step) * args.temp_step
-        return np.exp(args.temp_step * step)
+        return np.exp(args.temp_mult * step)
 
     model = sg_vae_conv.SG_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument("--weight-decay", type=float, default=0.0005)
     parser.add_argument("--straight-through", default=False, action="store_true")
     parser.add_argument("--kl-type", default="categorical", help="categorical or relaxed")
-    parser.add_argument("--temp-step", type=float, default=-1e-4)
+    parser.add_argument("--temp-mult", type=float, default=-1e-4)
     parser.add_argument("--temp-threshold", type=float, default=0.5)
     parser.add_argument("--temp-step", type=int, default=500)
 
