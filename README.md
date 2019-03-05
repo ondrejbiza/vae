@@ -9,6 +9,9 @@ python -m vae.scripts.vae_fc_mnist
 
 # convolutional autoencoder on MNIST
 python -m vae.scripts.vae_conv_mnist
+
+# categorical convolutional autoencoder with Gumbel-Softmax on MNIST
+python -m vae.scripts.sg_vae_conv_mnist
 ```
 
 Samples from a fully-connected autoencoder:
