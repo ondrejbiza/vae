@@ -24,11 +24,14 @@ def main(args):
     else:
         kl_type = sg_vae_conv.SG_VAE.KLType.RELAXED
 
+    def get_temp(step):
+        step = (step // args.temp_step) * args.temp_step
+        return np.exp(args.temp_step * step)
+
     model = sg_vae_conv.SG_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
         20, 10, sg_vae_conv.SG_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        kl_type, disable_kl_loss=args.disable_kl_loss,
-        straight_through=args.straight_through
+        kl_type, disable_kl_loss=args.disable_kl_loss, straight_through=args.straight_through
     )
 
     model.build_all()
@@ -59,7 +62,7 @@ def main(args):
         samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
 
         loss, output_loss, kl_loss, reg_loss = model.train(
-            samples, max(args.temp_threshold, np.exp(args.temp_step * train_step))
+            samples, max(args.temp_threshold, get_temp(train_step))
         )
 
         epoch_losses["total"].append(loss)
@@ -103,6 +106,7 @@ if __name__ == "__main__":
     parser.add_argument("--kl-type", default="categorical", help="categorical or relaxed")
     parser.add_argument("--temp-step", type=float, default=-1e-4)
     parser.add_argument("--temp-threshold", type=float, default=0.5)
+    parser.add_argument("--temp-step", type=int, default=500)
 
     parsed = parser.parse_args()
     main(parsed)
