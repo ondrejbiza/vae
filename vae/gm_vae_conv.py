@@ -254,8 +254,8 @@ class GM_VAE:
                 tf.reduce_sum(tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2) +
                 tf.reduce_sum(c_log_var_t, axis=2) + self.x_size * np.log(2 * np.pi)
             )
-            z_pred_softmax_t = tf.nn.softmax(z_pred_log_likelihood_t, axis=1)
-            z_pred_logsoftmax_t = tf.nn.log_softmax(z_pred_log_likelihood_t, axis=1)
+            z_pred_softmax_t = tf.nn.softmax(z_pred_log_likelihood_t / self.num_clusters, axis=1)
+            z_pred_logsoftmax_t = tf.nn.log_softmax(z_pred_log_likelihood_t / self.num_clusters, axis=1)
 
             # kl divergences
             w_kl_divergence_t = 0.5 * (tf.square(w_mu_t) + w_var_t - w_log_var_t - 1.0)
@@ -265,7 +265,7 @@ class GM_VAE:
                 tf.pow(x_mu_t[:, tf.newaxis, :] - c_mu_t, 2) / c_var_t
             ) * z_pred_softmax_t[:, :, tf.newaxis]
 
-            z_kl_divergence_t = - z_pred_softmax_t * (z_logsoftmax_t - z_pred_logsoftmax_t)
+            z_kl_divergence_t = z_pred_softmax_t * z_pred_logsoftmax_t
 
         return x_sample_t, x_mu_t, x_sd_t, x_var_t, w_sample_t, c_mu_t, c_sd_t, w_kl_divergence_t, x_kl_divergence_t, \
             z_kl_divergence_t
