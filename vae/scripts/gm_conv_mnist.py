@@ -62,7 +62,6 @@ def main(args):
         epoch_losses["regularization"].append(reg_loss)
 
     samples = model.predict(25)
-    model.stop_session()
 
     # plot samples
     _, axes = plt.subplots(nrows=5, ncols=5)
@@ -83,6 +82,28 @@ def main(args):
     plt.legend()
     plt.xlabel("epoch")
     plt.show()
+
+    # plot samples from mixtures
+    _, axes = plt.subplots(nrows=10, ncols=10)
+
+    c_mu, c_sd = model.get_clusters()
+
+    for c_idx in range(10):
+        for s_idx in range(10):
+
+            idx = c_idx * 10 + s_idx
+
+            x_sample = c_mu[c_idx] + np.random.uniform(0, 1) * c_sd[c_idx]
+            y_sample = model.predict_from_x_sample(x_sample[np.newaxis, :])[0]
+
+            axis = axes[idx // 10, idx % 10]
+
+            axis.imshow(y_sample, vmin=0, vmax=1, cmap="gray")
+            axis.axis("off")
+
+    plt.show()
+
+    model.stop_session()
 
 
 if __name__ == "__main__":
