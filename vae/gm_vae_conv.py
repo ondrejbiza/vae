@@ -139,8 +139,9 @@ class GM_VAE:
             x = self.build_encoder(self.input_pl)
 
             # middle
-            self.x_sample_t, self.x_mu_t, self.x_sd_t, self.x_var_t, self.w_sample_t, self.c_mu_t, self.c_sd_t, \
-                self.w_kl_divergence_t, self.x_kl_divergence_t, self.z_kl_divergence_t = self.build_middle(x)
+            self.x_sample_t, self.x_mu_t, self.x_sd_t, self.x_var_t, w_mu_t, w_sd_t, self.w_sample_t, self.c_mu_t, \
+                self.c_sd_t, self.w_kl_divergence_t, self.x_kl_divergence_t, self.z_kl_divergence_t = \
+                self.build_middle(x)
 
             # decoder
             self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.x_sample_t)
@@ -267,8 +268,8 @@ class GM_VAE:
 
             z_kl_divergence_t = z_pred_softmax_t * z_pred_logsoftmax_t
 
-        return x_sample_t, x_mu_t, x_sd_t, x_var_t, w_sample_t, c_mu_t, c_sd_t, w_kl_divergence_t, x_kl_divergence_t, \
-            z_kl_divergence_t
+        return x_sample_t, x_mu_t, x_sd_t, x_var_t, w_mu_t, w_sd_t, w_sample_t, c_mu_t, c_sd_t, w_kl_divergence_t, \
+            x_kl_divergence_t, z_kl_divergence_t
 
     def build_decoder(self, input_t, share_weights=False):
 
