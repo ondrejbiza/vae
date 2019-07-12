@@ -1,29 +1,39 @@
 import argparse
 import collections
+import os
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.utils import shuffle
-import tensorflow as tf
 from .. import gm_vae_fc
 
 
 def main(args):
 
+    # gpu settings
+    if args.gpus is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
+
+    # load and show dataset
     train_data = np.load("dataset/spiral.npy")
 
+    print("training data:")
     plt.scatter(train_data[:, 0], train_data[:, 1])
     plt.show()
 
-    # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
-    # in all fully-connected and convolutional layers
+    # build model
+    num_clusters = 8
+    x_size = 2
+    w_size = 2
+    num_inputs = 2
+
     model = gm_vae_fc.GM_VAE(
-        2, [120, 120], [120, 120, 2], [120], 5, 2, 2, gm_vae_fc.GM_VAE.LossType.L2, args.weight_decay,
-        args.learning_rate, clip_z_prior=args.clip_z_prior
+        num_inputs, [120, 120], [120, 120, num_inputs], [120], num_clusters, x_size, w_size,
+        gm_vae_fc.GM_VAE.LossType.L2, args.weight_decay, args.learning_rate, clip_z_prior=args.clip_z_prior
     )
 
     model.build_all()
-    model.start_session()
+    model.start_session(gpu_memory=args.gpu_memory_fraction)
 
+    # train model
     epoch_size = len(train_data) // args.batch_size
 
     losses = collections.defaultdict(list)
@@ -66,45 +76,43 @@ def main(args):
     plt.xlabel("epoch")
     plt.show()
 
-    # plot x
-    print("x samples")
-    x_samples = model.encode(train_data, args.batch_size)
+    x_encodings, w_encodings = model.encode(train_data, args.batch_size)
+    y_decodings = model.predict_from_x_sample(x_encodings)
 
-    plt.scatter(x_samples[:, 0], x_samples[:, 1])
+    # plot x
+    print("encodings to x:")
+    plt.scatter(x_encodings[:, 0], x_encodings[:, 1])
+    plt.show()
+
+    # plot w
+    print("encodings to w:")
+    plt.scatter(w_encodings[:, 0], w_encodings[:, 1])
     plt.show()
 
     # plot reconstruction
-    print("y samples")
-    y_samples = model.predict_from_x_sample(x_samples)
-
-    plt.scatter(y_samples[:, 0], y_samples[:, 1])
+    print("reconstructions:")
+    plt.scatter(y_decodings[:, 0], y_decodings[:, 1])
     plt.show()
 
     # plot samples from mixtures
-    samples = []
-    classes = []
+    w_samples = np.random.normal(0, 1, size=(100, w_size))
+    c_mu, c_sd = model.get_clusters(w_samples)
 
-    c_mu, c_sd = model.get_clusters()
+    print("cluster centroids:")
+    for c_idx in range(num_clusters):
+        plt.scatter(c_mu[:, c_idx, 0], c_mu[:, c_idx, 1], label="cluster {:d}".format(c_idx + 1))
 
-    print("clusters")
-    print(c_mu.shape)
-    print(c_sd)
-    plt.scatter(c_mu[:, 0], c_mu[:, 1])
+    plt.legend()
     plt.show()
 
-    for c_idx in range(4):
-        for s_idx in range(100):
+    print("cluster samples:")
+    for c_idx in range(num_clusters):
+        x_samples = c_mu[:, c_idx, :] + np.random.normal(0, 1, size=(100, x_size)) * c_sd[:, c_idx, :]
+        y_samples = model.predict_from_x_sample(x_samples)
 
-            x_sample = c_mu[c_idx] + np.random.normal(0, 1, size=2) * c_sd[c_idx]
-            y_sample = model.predict_from_x_sample(x_sample[np.newaxis, :])[0]
+        plt.scatter(y_samples[:, 0], y_samples[:, 1], label="cluster {:d}".format(c_idx + 1))
 
-            samples.append(y_sample)
-            classes.append(c_idx + 1)
-
-    samples = np.stack(samples, axis=0)
-    classes = np.array(classes, dtype=np.int32)
-
-    plt.scatter(samples[:, 0], samples[:, 1], c=classes)
+    plt.legend()
     plt.show()
 
     model.stop_session()
@@ -118,7 +126,10 @@ if __name__ == "__main__":
     parser.add_argument("--learning-rate", type=float, default=0.0001)
     parser.add_argument("--batch-size", type=int, default=50)
     parser.add_argument("--weight-decay", type=float, default=0.0)
-    parser.add_argument("--clip-z-prior", type=float, default=None)
+    parser.add_argument("--clip-z-prior", type=float, default=1.4)
+
+    parser.add_argument("--gpus", default=None)
+    parser.add_argument("--gpu-memory-fraction", default=None, type=float)
 
     parsed = parser.parse_args()
     main(parsed)

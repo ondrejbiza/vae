@@ -29,7 +29,7 @@ def main(args):
     )
 
     model.build_all()
-    model.start_session()
+    model.start_session(gpu_memory=args.gpu_memory_fraction)
 
     epoch_size = len(train_data) // args.batch_size
 
@@ -121,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--clip-z-prior", type=float, default=None)
 
     parser.add_argument("--gpus", default=None)
+    parser.add_argument("--gpu-memory-fraction", default=None, type=float)
 
     parsed = parser.parse_args()
     main(parsed)

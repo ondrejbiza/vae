@@ -53,21 +53,24 @@ class GM_VAE:
     def encode(self, inputs, batch_size):
 
         num_steps = int(np.ceil(inputs.shape[0] / batch_size))
-        encodings = []
+        x_encodings = []
+        w_encodings = []
 
         for step_idx in range(num_steps):
 
             batch_slice = np.index_exp[step_idx * batch_size:(step_idx + 1) * batch_size]
 
-            tmp_encoding = self.session.run(self.x_sample_t, feed_dict={
+            tmp_x_encoding, tmp_w_encoding = self.session.run([self.x_sample_t, self.w_sample_t], feed_dict={
                 self.input_pl: inputs[batch_slice]
             })
 
-            encodings.append(tmp_encoding)
+            x_encodings.append(tmp_x_encoding)
+            w_encodings.append(tmp_w_encoding)
 
-        encodings = np.concatenate(encodings, axis=0)
+        x_encodings = np.concatenate(x_encodings, axis=0)
+        w_encodings = np.concatenate(w_encodings, axis=0)
 
-        return encodings
+        return x_encodings, w_encodings
 
     def predict(self, num_samples):
 
@@ -88,13 +91,13 @@ class GM_VAE:
 
         return outputs
 
-    def get_clusters(self):
+    def get_clusters(self, w_samples):
 
         c_mu, c_sd = self.session.run([self.c_mu_t, self.c_sd_t], feed_dict={
-            self.w_sample_t: np.zeros((1, self.w_size), dtype=np.float32)
+            self.w_sample_t: w_samples
         })
 
-        return c_mu[0], c_sd[0]
+        return c_mu, c_sd
 
     def train(self, samples):
 
@@ -225,13 +228,6 @@ class GM_VAE:
             c_sd_t = tf.square(c_var_t)
 
             # predict z from x and clusters
-            # z_pred_exp = (1 / 2) * tf.reduce_sum(
-            #    tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
-            # )
-            # z_pred_exp -= tf.reduce_max(z_pred_exp, axis=1)[:, tf.newaxis]
-            # z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- z_pred_exp)
-            # z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
-
             z_pred_logits = - (self.num_clusters / 2) * np.log(2 * np.pi) - \
                             (1 / 2) * tf.reduce_sum(c_log_var_t, axis=2) - \
                             (1 / 2) * tf.reduce_sum(tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2)
@@ -320,7 +316,7 @@ class GM_VAE:
             else:
                 self.reg_loss_t = tf.add_n(reg_losses)
 
-            self.loss_t = self.output_loss_t + self.w_kl_loss_t + self.x_kl_loss_t + self.z_kl_loss_t * 0 + self.reg_loss_t
+            self.loss_t = self.output_loss_t + self.w_kl_loss_t + self.x_kl_loss_t + self.z_kl_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 

@@ -268,13 +268,6 @@ class GM_VAE:
             c_sd_t = tf.square(c_var_t)
 
             # predict z from x and clusters
-            #z_pred_exp = (1 / 2) * tf.reduce_sum(
-            #    tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
-            #)
-            #z_pred_exp -= tf.reduce_max(z_pred_exp, axis=1)[:, tf.newaxis]
-            #z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- z_pred_exp)
-            #z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
-
             z_pred_logits = - (self.num_clusters / 2) * np.log(2 * np.pi) - \
                 (1 / 2) * tf.reduce_sum(c_log_var_t, axis=2) - \
                 (1 / 2) * tf.reduce_sum(tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2)
