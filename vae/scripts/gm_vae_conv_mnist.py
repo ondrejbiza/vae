@@ -58,8 +58,6 @@ def main(args):
 
         loss, output_loss, w_kl_loss, x_kl_loss, z_kl_loss, reg_loss = model.train(samples)
 
-        print(output_loss, w_kl_loss, x_kl_loss, z_kl_loss, reg_loss)
-
         epoch_losses["total"].append(loss)
         epoch_losses["output"].append(output_loss)
         epoch_losses["w KL divergence"].append(w_kl_loss)
