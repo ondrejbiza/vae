@@ -225,12 +225,18 @@ class GM_VAE:
             c_sd_t = tf.square(c_var_t)
 
             # predict z from x and clusters
-            z_pred_exp = (1 / 2) * tf.reduce_sum(
-                tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
-            )
-            z_pred_exp -= tf.reduce_max(z_pred_exp)
-            z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- z_pred_exp)
-            z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
+            # z_pred_exp = (1 / 2) * tf.reduce_sum(
+            #    tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
+            # )
+            # z_pred_exp -= tf.reduce_max(z_pred_exp, axis=1)[:, tf.newaxis]
+            # z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- z_pred_exp)
+            # z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
+
+            z_pred_logits = - (self.num_clusters / 2) * np.log(2 * np.pi) - \
+                            (1 / 2) * tf.reduce_sum(c_log_var_t, axis=2) - \
+                            (1 / 2) * tf.reduce_sum(tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2)
+            z_pred_softmax = tf.nn.softmax(z_pred_logits, axis=1)
+            z_pred_logsoftmax = tf.nn.log_softmax(z_pred_logits, axis=1)
 
             # kl divergences
             w_kl_divergence_t = 0.5 * (tf.square(w_mu_t) + w_var_t - w_log_var_t - 1.0)
@@ -238,9 +244,9 @@ class GM_VAE:
             x_kl_divergence_t = 0.5 * (
                 c_log_var_t - x_log_var_t[:, tf.newaxis, :] - 1.0 + (x_var_t[:, tf.newaxis, :] / c_var_t) +
                 tf.pow(x_mu_t[:, tf.newaxis, :] - c_mu_t, 2) / c_var_t
-            ) * z_pred_prob[:, :, tf.newaxis]
+            ) * z_pred_softmax[:, :, tf.newaxis]
 
-            z_kl_divergence_t = z_pred_prob * tf.log(z_pred_prob * self.num_clusters + 1e-6)
+            z_kl_divergence_t = z_pred_softmax * (z_pred_logsoftmax + np.log(self.num_clusters))
 
         return x_sample_t, x_mu_t, x_sd_t, x_var_t, w_mu_t, w_sd_t, w_sample_t, c_mu_t, c_sd_t, w_kl_divergence_t, \
             x_kl_divergence_t, z_kl_divergence_t

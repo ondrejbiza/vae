@@ -1,5 +1,6 @@
 import argparse
 import collections
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
@@ -8,6 +9,9 @@ from .. import gm_vae_conv
 
 
 def main(args):
+
+    if args.gpus is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
 
     ((train_data, train_labels), (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data()
     train_data = train_data / 255.0
@@ -19,7 +23,7 @@ def main(args):
     # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
     # in all fully-connected and convolutional layers
     model = gm_vae_conv.GM_VAE(
-        [28, 28], [16, 32, 64], [6, 6, 4], [1, 1, 2], [500], [500], [64, 32, 16, 1], [4, 6, 6, 1], [2, 1, 1, 1],
+        [28, 28], [16, 32, 64], [6, 6, 4], [1, 1, 2], [500], [500], [64, 32, 16, 1], [4, 6, 6, 1], [2, 2, 2, 1],
         [500], 10, 200, 150, gm_vae_conv.GM_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
         clip_z_prior=args.clip_z_prior
     )
@@ -117,6 +121,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=50)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--clip-z-prior", type=float, default=None)
+
+    parser.add_argument("--gpus", default=None)
 
     parsed = parser.parse_args()
     main(parsed)

@@ -73,7 +73,8 @@ class GM_VAE:
             batch_slice = np.index_exp[step_idx * batch_size:(step_idx + 1) * batch_size]
 
             tmp_encoding = self.session.run(self.x_sample_t, feed_dict={
-                self.input_pl: inputs[batch_slice]
+                self.input_pl: inputs[batch_slice],
+                self.is_training_pl: False
             })
 
             encodings.append(tmp_encoding)
@@ -86,8 +87,8 @@ class GM_VAE:
 
         outputs = self.session.run(self.output_t, feed_dict={
             self.x_mu_t: np.zeros((num_samples, self.x_size), dtype=np.float32),
-            self.x_sd_t: np.ones((num_samples, self.x_size), dtype=np.float32)
-
+            self.x_sd_t: np.ones((num_samples, self.x_size), dtype=np.float32),
+            self.is_training_pl: False
         })
 
         return outputs[:, :, :, 0]
@@ -95,8 +96,8 @@ class GM_VAE:
     def predict_from_x_sample(self, x_samples):
 
         outputs = self.session.run(self.output_t, feed_dict={
-            self.x_sample_t: x_samples
-
+            self.x_sample_t: x_samples,
+            self.is_training_pl: False
         })
 
         return outputs[:, :, :, 0]
@@ -104,7 +105,8 @@ class GM_VAE:
     def get_clusters(self):
 
         c_mu, c_sd = self.session.run([self.c_mu_t, self.c_sd_t], feed_dict={
-            self.w_sample_t: np.zeros((1, self.w_size), dtype=np.float32)
+            self.w_sample_t: np.zeros((1, self.w_size), dtype=np.float32),
+            self.is_training_pl: False
         })
 
         return c_mu[0], c_sd[0]
@@ -114,7 +116,8 @@ class GM_VAE:
         _, loss, output_loss, w_kl_loss, x_kl_loss, z_kl_loss, reg_loss = self.session.run(
             [self.step_op, self.loss_t, self.output_loss_t, self.w_kl_loss_t, self.x_kl_loss_t, self.z_kl_loss_t,
              self.reg_loss_t], feed_dict={
-                self.input_pl: samples
+                self.input_pl: samples,
+                self.is_training_pl: True
             }
         )
 
@@ -209,11 +212,13 @@ class GM_VAE:
             # predict x
             x_mu_t = tf.layers.dense(
                 input_1_t, self.x_size, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
             x_log_var_t = tf.layers.dense(
                 input_1_t, self.x_size, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
             x_var_t = tf.exp(x_log_var_t)
             x_sd_t = tf.sqrt(x_var_t)
@@ -227,11 +232,13 @@ class GM_VAE:
             # predict w
             w_mu_t = tf.layers.dense(
                 input_1_t, self.w_size, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
             w_log_var_t = tf.layers.dense(
                 input_1_t, self.w_size, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
             w_var_t = tf.exp(w_log_var_t)
             w_sd_t = tf.sqrt(w_var_t)
@@ -247,22 +254,32 @@ class GM_VAE:
 
             c_mu_t = tf.layers.dense(
                 input_2_t, self.x_size * self.num_clusters, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
             c_mu_t = tf.reshape(c_mu_t, shape=(tf.shape(c_mu_t)[0], self.num_clusters, self.x_size))
             c_log_var_t = tf.layers.dense(
                 input_2_t, self.x_size * self.num_clusters, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                kernel_initializer=tf.contrib.layers.xavier_initializer()
             )
             c_log_var_t = tf.reshape(c_log_var_t, shape=(tf.shape(c_log_var_t)[0], self.num_clusters, self.x_size))
             c_var_t = tf.exp(c_log_var_t)
             c_sd_t = tf.square(c_var_t)
 
             # predict z from x and clusters
-            z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- (1 / 2) * tf.reduce_sum(
-                tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
-            ))
-            z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
+            #z_pred_exp = (1 / 2) * tf.reduce_sum(
+            #    tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
+            #)
+            #z_pred_exp -= tf.reduce_max(z_pred_exp, axis=1)[:, tf.newaxis]
+            #z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- z_pred_exp)
+            #z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
+
+            z_pred_logits = - (self.num_clusters / 2) * np.log(2 * np.pi) - \
+                (1 / 2) * tf.reduce_sum(c_log_var_t, axis=2) - \
+                (1 / 2) * tf.reduce_sum(tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2)
+            z_pred_softmax = tf.nn.softmax(z_pred_logits, axis=1)
+            z_pred_logsoftmax = tf.nn.log_softmax(z_pred_logits, axis=1)
 
             # kl divergences
             w_kl_divergence_t = 0.5 * (tf.square(w_mu_t) + w_var_t - w_log_var_t - 1.0)
@@ -270,9 +287,9 @@ class GM_VAE:
             x_kl_divergence_t = 0.5 * (
                 c_log_var_t - x_log_var_t[:, tf.newaxis, :] - 1.0 + (x_var_t[:, tf.newaxis, :] / c_var_t) +
                 tf.pow(x_mu_t[:, tf.newaxis, :] - c_mu_t, 2) / c_var_t
-            ) * z_pred_prob[:, :, tf.newaxis]
+            ) * z_pred_softmax[:, :, tf.newaxis]
 
-            z_kl_divergence_t = z_pred_prob * tf.log(z_pred_prob * self.num_clusters + 1e-6)
+            z_kl_divergence_t = z_pred_softmax * (z_pred_logsoftmax + np.log(self.num_clusters))
 
         return x_sample_t, x_mu_t, x_sd_t, x_var_t, w_mu_t, w_sd_t, w_sample_t, c_mu_t, c_sd_t, w_kl_divergence_t, \
             x_kl_divergence_t, z_kl_divergence_t
@@ -290,6 +307,7 @@ class GM_VAE:
                         kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
                         kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
+
                     if self.use_bn:
                         x = tf.layers.batch_normalization(x, training=self.is_training_pl)
                         x = tf.nn.relu(x)
@@ -307,6 +325,7 @@ class GM_VAE:
                         kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
                         kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
+
                     if self.use_bn and not last:
                         x = tf.layers.batch_normalization(x, training=self.is_training_pl)
                         x = tf.nn.relu(x)
@@ -368,6 +387,10 @@ class GM_VAE:
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 
+            if self.use_bn:
+                self.update_op = tf.group(*tf.get_collection(tf.GraphKeys.UPDATE_OPS))
+                self.step_op = tf.group(self.step_op, self.update_op)
+
     def start_session(self, gpu_memory=None):
 
         gpu_options = None
@@ -395,4 +418,3 @@ class GM_VAE:
     def load(self, path):
 
         self.saver.restore(self.session, path)
-
