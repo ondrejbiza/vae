@@ -17,7 +17,8 @@ class GM_VAE:
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, cluster_predictor_neurons,
-                 num_clusters, x_size, w_size, loss_type, weight_decay, learning_rate):
+                 num_clusters, x_size, w_size, loss_type, weight_decay, learning_rate,
+                 cluster_predictor_activation=tf.nn.tanh, clip_z_prior=None, use_bn=True):
 
         assert loss_type in self.LossType
         assert len(encoder_filters) == len(encoder_filter_sizes) == len(encoder_strides)
@@ -40,6 +41,9 @@ class GM_VAE:
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
+        self.cluster_predictor_activation = cluster_predictor_activation
+        self.clip_z_prior = clip_z_prior
+        self.use_bn = use_bn
 
         self.input_pl = None
         self.input_flat_t = None
@@ -130,6 +134,7 @@ class GM_VAE:
 
         self.input_pl = tf.placeholder(tf.float32, shape=(None, *self.input_shape), name="input_pl")
         self.input_flat_t = tf.reshape(self.input_pl, shape=(tf.shape(self.input_pl)[0], self.flat_input_shape))
+        self.is_training_pl = tf.placeholder(tf.bool, shape=[], name="is_training_pl")
 
     def build_network(self):
 
@@ -156,18 +161,28 @@ class GM_VAE:
                 with tf.variable_scope("conv{:d}".format(idx + 1)):
                     x = tf.layers.conv2d(
                         x, self.encoder_filters[idx], self.encoder_filter_sizes[idx], self.encoder_strides[idx],
-                        padding="SAME", activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        padding="SAME", activation=tf.nn.relu if not self.use_bn else None,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
+
+                    if self.use_bn:
+                        x = tf.layers.batch_normalization(x, training=self.is_training_pl)
+                        x = tf.nn.relu(x)
 
             x = tf.layers.flatten(x)
 
             for idx, neurons in enumerate(self.encoder_neurons):
                 with tf.variable_scope("fc{:d}".format(idx + 1)):
                     x = tf.layers.dense(
-                        x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        x, neurons, activation=tf.nn.relu if not self.use_bn else None,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
+
+                    if self.use_bn:
+                        x = tf.layers.batch_normalization(x, training=self.is_training_pl)
+                        x = tf.nn.relu(x)
 
         return x
 
@@ -180,8 +195,9 @@ class GM_VAE:
             for idx, neurons in enumerate(self.cluster_predictor_neurons):
                 with tf.variable_scope("fc{:d}".format(idx + 1)):
                     x = tf.layers.dense(
-                        x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        x, neurons, activation=self.cluster_predictor_activation,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
 
         return x
@@ -189,14 +205,6 @@ class GM_VAE:
     def build_middle(self, input_1_t, share_weights=False):
 
         with tf.variable_scope("middle", reuse=share_weights):
-
-            # predict z
-            z_logits_t = tf.layers.dense(
-                input_1_t, self.num_clusters, activation=tf.nn.softmax,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-            )
-            z_softmax_t = tf.nn.softmax(z_logits_t)
-            z_logsoftmax_t = tf.nn.log_softmax(z_logits_t)
 
             # predict x
             x_mu_t = tf.layers.dense(
@@ -251,12 +259,10 @@ class GM_VAE:
             c_sd_t = tf.square(c_var_t)
 
             # predict z from x and clusters
-            z_pred_log_likelihood_t = - 0.5 * (
-                tf.reduce_sum(tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2) +
-                tf.reduce_sum(c_log_var_t, axis=2) + self.x_size * np.log(2 * np.pi)
-            )
-            z_pred_softmax_t = tf.nn.softmax(z_pred_log_likelihood_t / self.num_clusters, axis=1)
-            z_pred_logsoftmax_t = tf.nn.log_softmax(z_pred_log_likelihood_t / self.num_clusters, axis=1)
+            z_pred_prob = tf.reduce_prod(1 / c_var_t, axis=2) * tf.exp(- (1 / 2) * tf.reduce_sum(
+                tf.pow(c_mu_t - x_sample_t[:, tf.newaxis, :], 2) / c_var_t, axis=2
+            ))
+            z_pred_prob /= tf.reduce_sum(z_pred_prob, axis=1)[:, tf.newaxis]
 
             # kl divergences
             w_kl_divergence_t = 0.5 * (tf.square(w_mu_t) + w_var_t - w_log_var_t - 1.0)
@@ -264,9 +270,9 @@ class GM_VAE:
             x_kl_divergence_t = 0.5 * (
                 c_log_var_t - x_log_var_t[:, tf.newaxis, :] - 1.0 + (x_var_t[:, tf.newaxis, :] / c_var_t) +
                 tf.pow(x_mu_t[:, tf.newaxis, :] - c_mu_t, 2) / c_var_t
-            ) * z_pred_softmax_t[:, :, tf.newaxis]
+            ) * z_pred_prob[:, :, tf.newaxis]
 
-            z_kl_divergence_t = z_pred_softmax_t * z_pred_logsoftmax_t
+            z_kl_divergence_t = z_pred_prob * tf.log(z_pred_prob * self.num_clusters + 1e-6)
 
         return x_sample_t, x_mu_t, x_sd_t, x_var_t, w_mu_t, w_sd_t, w_sample_t, c_mu_t, c_sd_t, w_kl_divergence_t, \
             x_kl_divergence_t, z_kl_divergence_t
@@ -280,19 +286,30 @@ class GM_VAE:
             for idx, neurons in enumerate(self.decoder_neurons):
                 with tf.variable_scope("fc{:d}".format(idx + 1)):
                     x = tf.layers.dense(
-                        x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        x, neurons, activation=tf.nn.relu if not self.use_bn else None,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
+                    if self.use_bn:
+                        x = tf.layers.batch_normalization(x, training=self.is_training_pl)
+                        x = tf.nn.relu(x)
 
             x = x[:, tf.newaxis, tf.newaxis, :]
 
             for idx in range(len(self.decoder_filters)):
                 with tf.variable_scope("conv{:d}".format(idx + 1)):
+
+                    last = idx == len(self.decoder_filters) - 1
+
                     x = tf.layers.conv2d_transpose(
                         x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
-                        padding="VALID", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        padding="VALID", activation=tf.nn.relu if not (last or self.use_bn) else None,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.contrib.layers.xavier_initializer()
                     )
+                    if self.use_bn and not last:
+                        x = tf.layers.batch_normalization(x, training=self.is_training_pl)
+                        x = tf.nn.relu(x)
 
         logits_t = x
         flat_logits_t = tf.layers.flatten(x)
@@ -337,7 +354,15 @@ class GM_VAE:
 
             self.z_kl_loss_t = tf.reduce_mean(tf.reduce_sum(self.z_kl_divergence_t, axis=1), axis=0)
 
-            self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+            if self.clip_z_prior is not None:
+                self.z_kl_loss_t = tf.reduce_max([self.z_kl_loss_t, self.clip_z_prior])
+
+            reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+            if len(reg_losses) == 0:
+                self.reg_loss_t = tf.constant(0.0, dtype=tf.float32)
+            else:
+                self.reg_loss_t = tf.add_n(reg_losses)
 
             self.loss_t = self.output_loss_t + self.w_kl_loss_t + self.x_kl_loss_t + self.z_kl_loss_t + self.reg_loss_t
 

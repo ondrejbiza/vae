@@ -121,7 +121,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--disable-kl-loss", default=False, action="store_true")
     parser.add_argument("--num-training-steps", type=int, default=100000)
     parser.add_argument("--learning-rate", type=float, default=0.0001)
     parser.add_argument("--batch-size", type=int, default=50)

@@ -4,24 +4,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 import tensorflow as tf
-from .. import gm_vae_conv
+from .. import gm_vae_fc
 
 
 def main(args):
 
-    ((train_data, train_labels), (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data()
-    train_data = train_data / 255.0
-    eval_data = eval_data / 255.0
+    train_data = np.load("dataset/spiral.npy")
 
-    train_data, train_labels = shuffle(train_data, train_labels)
-    eval_data, eval_labels = shuffle(eval_data, eval_labels)
+    plt.scatter(train_data[:, 0], train_data[:, 1])
+    plt.show()
 
     # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
     # in all fully-connected and convolutional layers
-    model = gm_vae_conv.GM_VAE(
-        [28, 28], [16, 32, 64], [6, 6, 4], [1, 1, 2], [500], [500], [64, 32, 16, 1], [4, 6, 6, 1], [2, 1, 1, 1],
-        [500], 10, 200, 150, gm_vae_conv.GM_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        clip_z_prior=args.clip_z_prior
+    model = gm_vae_fc.GM_VAE(
+        2, [120, 120], [120, 120, 2], [120], 5, 2, 2, gm_vae_fc.GM_VAE.LossType.L2, args.weight_decay,
+        args.learning_rate, clip_z_prior=args.clip_z_prior
     )
 
     model.build_all()
@@ -54,28 +51,12 @@ def main(args):
 
         loss, output_loss, w_kl_loss, x_kl_loss, z_kl_loss, reg_loss = model.train(samples)
 
-        print(output_loss, w_kl_loss, x_kl_loss, z_kl_loss, reg_loss)
-
         epoch_losses["total"].append(loss)
         epoch_losses["output"].append(output_loss)
         epoch_losses["w KL divergence"].append(w_kl_loss)
         epoch_losses["x KL divergence"].append(x_kl_loss)
         epoch_losses["z KL divergence"].append(z_kl_loss)
         epoch_losses["regularization"].append(reg_loss)
-
-    samples = model.predict(25)
-
-    # plot samples
-    _, axes = plt.subplots(nrows=5, ncols=5)
-
-    for i in range(25):
-
-        axis = axes[i // 5, i % 5]
-
-        axis.imshow(samples[i], vmin=0, vmax=1, cmap="gray")
-        axis.axis("off")
-
-    plt.show()
 
     # plot losses
     for key, value in losses.items():
@@ -85,24 +66,45 @@ def main(args):
     plt.xlabel("epoch")
     plt.show()
 
+    # plot x
+    print("x samples")
+    x_samples = model.encode(train_data, args.batch_size)
+
+    plt.scatter(x_samples[:, 0], x_samples[:, 1])
+    plt.show()
+
+    # plot reconstruction
+    print("y samples")
+    y_samples = model.predict_from_x_sample(x_samples)
+
+    plt.scatter(y_samples[:, 0], y_samples[:, 1])
+    plt.show()
+
     # plot samples from mixtures
-    _, axes = plt.subplots(nrows=10, ncols=10)
+    samples = []
+    classes = []
 
     c_mu, c_sd = model.get_clusters()
 
-    for c_idx in range(10):
-        for s_idx in range(10):
+    print("clusters")
+    print(c_mu.shape)
+    print(c_sd)
+    plt.scatter(c_mu[:, 0], c_mu[:, 1])
+    plt.show()
 
-            idx = c_idx * 10 + s_idx
+    for c_idx in range(4):
+        for s_idx in range(100):
 
-            x_sample = c_mu[c_idx] + np.random.normal(0, 1, size=200) * c_sd[c_idx]
+            x_sample = c_mu[c_idx] + np.random.normal(0, 1, size=2) * c_sd[c_idx]
             y_sample = model.predict_from_x_sample(x_sample[np.newaxis, :])[0]
 
-            axis = axes[idx // 10, idx % 10]
+            samples.append(y_sample)
+            classes.append(c_idx + 1)
 
-            axis.imshow(y_sample, vmin=0, vmax=1, cmap="gray")
-            axis.axis("off")
+    samples = np.stack(samples, axis=0)
+    classes = np.array(classes, dtype=np.int32)
 
+    plt.scatter(samples[:, 0], samples[:, 1], c=classes)
     plt.show()
 
     model.stop_session()
