@@ -11,7 +11,7 @@ plt.scatter(train_data[:, 0], train_data[:, 1])
 plt.show()
 
 model = vampprior_vae_fc.VAMPPRIOR_VAE(
-    [2], [16, 16], [16, 16, 2], 2, vampprior_vae_fc.VAMPPRIOR_VAE.LossType.L2, 0.0001, 0.001, 4, beta1=0.001,
+    [2], [16, 16], [16, 16, 2], 2, vampprior_vae_fc.VAMPPRIOR_VAE.LossType.L2, 0.0001, 0.001, 4, beta1=1.0,
     beta2=1.0
 )
 
@@ -50,8 +50,12 @@ for train_step in range(10000):
     epoch_losses["prior loss"].append(prior_loss)
     epoch_losses["regularization"].append(reg_loss)
 
-samples = model.predict(400)
+samples, pseudo_inputs = model.predict(400)
 model.stop_session()
+
+# plot pseudo inputs
+plt.scatter(pseudo_inputs[:, 0], pseudo_inputs[:, 1])
+plt.show()
 
 # plot samples
 plt.scatter(samples[:, 0], samples[:, 1])
