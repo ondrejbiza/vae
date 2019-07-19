@@ -3,6 +3,7 @@ import collections
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from .. import paths
 from .. import gm_vae_fc
 
 
@@ -13,7 +14,7 @@ def main(args):
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
 
     # load and show dataset
-    train_data = np.load("dataset/spiral.npy")
+    train_data = np.load(paths.SPIRAL_DATASET)
 
     print("training data:")
     plt.scatter(train_data[:, 0], train_data[:, 1])
@@ -57,7 +58,7 @@ def main(args):
 
             epoch_losses = collections.defaultdict(list)
 
-        samples = train_data[epoch_step * args.batch_size : (epoch_step + 1) * args.batch_size]
+        samples = train_data[epoch_step * args.batch_size: (epoch_step + 1) * args.batch_size]
 
         loss, output_loss, w_kl_loss, x_kl_loss, z_kl_loss, reg_loss = model.train(samples)
 

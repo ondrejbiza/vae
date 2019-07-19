@@ -3,6 +3,7 @@ import collections
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from .. import toy_dataset
 from .. import gm_vae_fc
 
 
@@ -13,15 +14,7 @@ def main(args):
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
 
     # generate and show dataset
-    sd = 0.1
-    num_points = 1000
-
-    train_data = np.concatenate([
-        np.random.multivariate_normal([1, 1], [[sd, 0], [0, sd]], size=num_points),
-        np.random.multivariate_normal([1, -1], [[sd, 0], [0, sd]], size=num_points),
-        np.random.multivariate_normal([-1, 1], [[sd, 0], [0, sd]], size=num_points),
-        np.random.multivariate_normal([-1, -1], [[sd, 0], [0, sd]], size=num_points)
-    ], axis=0)
+    train_data = toy_dataset.get_dataset()
 
     print("training data:")
     plt.scatter(train_data[:, 0], train_data[:, 1])
