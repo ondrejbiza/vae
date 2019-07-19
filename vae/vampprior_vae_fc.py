@@ -17,7 +17,7 @@ class VAMPPRIOR_VAE:
         L2 = 2
 
     def __init__(self, input_shape, encoder_neurons, decoder_neurons, latent_space_size, loss_type,
-                 weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None):
+                 weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0):
 
         assert loss_type in self.LossType
 
@@ -31,6 +31,8 @@ class VAMPPRIOR_VAE:
         self.learning_rate = learning_rate
         self.num_pseudo_inputs = num_pseudo_inputs
         self.pseudo_inputs_activation = pseudo_inputs_activation
+        self.beta1 = beta1
+        self.beta2 = beta2
 
         self.input_pl = None
         self.input_flat_t = None
@@ -63,9 +65,12 @@ class VAMPPRIOR_VAE:
 
     def predict(self, num_samples):
 
+        pseudo_mu, pseudo_var = self.session.run([self.pseudo_mu_t, self.pseudo_var_t])
+        assignments = np.random.randint(0, self.num_pseudo_inputs, size=num_samples)
+
         flat_outputs = self.session.run(self.output_t, feed_dict={
-            self.mu_t: np.zeros((num_samples, self.latent_space_size), dtype=np.float32),
-            self.sd_t: np.ones((num_samples, self.latent_space_size), dtype=np.float32)
+            self.mu_t: pseudo_mu[assignments],
+            self.sd_t: pseudo_var[assignments]
 
         })
 
@@ -150,12 +155,14 @@ class VAMPPRIOR_VAE:
                 self.sample_t = self.mu_t + self.sd_noise_t
 
                 # calculate encoder entropy
-                self.encoder_entropy_t = (1 / 2) * tf.reduce_sum(np.log(2 * np.pi * np.e) + self.log_var_t, axis=1)
+                self.encoder_entropy_t = (1 / 2) * tf.reduce_sum(self.log_var_t, axis=1) + \
+                    (self.latent_space_size / 2) * (1 + np.log(2 * np.pi))
 
                 # calculate prior expectation
+                # TODO: wrong
                 self.pseudo_dist = tfp.distributions.MultivariateNormalDiag(self.pseudo_mu_t, self.pseudo_var_t)
-                sample_probs_t = self.pseudo_dist.prob(self.sample_t[:, tf.newaxis, :])
-                self.pseudo_expectation_t = tf.log(tf.reduce_mean(sample_probs_t, axis=1) + 1e-6)
+                self.sample_probs_t = self.pseudo_dist.prob(self.sample_t[:, tf.newaxis, :])
+                self.pseudo_expectation_t = tf.log(tf.reduce_mean(self.sample_probs_t, axis=1) + 1e-6)
 
             # decoder
             x = self.sample_t
@@ -204,11 +211,12 @@ class VAMPPRIOR_VAE:
 
             self.entropy_loss_t = - tf.reduce_mean(self.encoder_entropy_t, axis=0)
 
-            self.prior_loss_t = tf.reduce_mean(self.pseudo_expectation_t, axis=0)
+            self.prior_loss_t = - tf.reduce_mean(self.pseudo_expectation_t, axis=0)
 
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
-            self.loss_t = self.output_loss_t + self.entropy_loss_t + self.prior_loss_t + self.reg_loss_t
+            self.loss_t = self.output_loss_t + self.beta1 * self.entropy_loss_t + self.beta2 * self.prior_loss_t + \
+                self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 

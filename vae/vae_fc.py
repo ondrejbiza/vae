@@ -16,7 +16,7 @@ class VAE:
         L2 = 2
 
     def __init__(self, input_shape, encoder_neurons, decoder_neurons, latent_space_size, loss_type,
-                 weight_decay, learning_rate):
+                 weight_decay, learning_rate, beta=1.0):
 
         assert loss_type in self.LossType
 
@@ -28,6 +28,7 @@ class VAE:
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
+        self.beta = beta
 
         self.input_pl = None
         self.input_flat_t = None
@@ -68,6 +69,14 @@ class VAE:
         outputs = np.reshape(flat_outputs, (num_samples, *self.input_shape))
 
         return outputs
+
+    def encode(self, x):
+
+        samples = self.session.run(self.sample_t, feed_dict={
+            self.input_flat_t: x
+        })
+
+        return samples
 
     def train(self, samples):
 
@@ -173,7 +182,7 @@ class VAE:
 
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
-            self.loss_t = self.output_loss_t + self.kl_loss_t + self.reg_loss_t
+            self.loss_t = self.output_loss_t + self.beta * self.kl_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
 

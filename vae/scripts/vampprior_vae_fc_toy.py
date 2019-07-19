@@ -7,8 +7,12 @@ from .. import vampprior_vae_fc
 
 train_data = toy_dataset.get_dataset()
 
+plt.scatter(train_data[:, 0], train_data[:, 1])
+plt.show()
+
 model = vampprior_vae_fc.VAMPPRIOR_VAE(
-    [2], [120, 120], [120, 120, 2], 120, vampprior_vae_fc.VAMPPRIOR_VAE.LossType.L2, 0.0005, 0.0001, 4
+    [2], [16, 16], [16, 16, 2], 2, vampprior_vae_fc.VAMPPRIOR_VAE.LossType.L2, 0.0001, 0.001, 4, beta1=0.001,
+    beta2=1.0
 )
 
 model.start_session()
@@ -39,8 +43,6 @@ for train_step in range(10000):
     samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
 
     loss, output_loss, entropy_loss, prior_loss, reg_loss = model.train(samples)
-
-    #print(output_loss, entropy_loss, prior_loss, reg_loss)
 
     epoch_losses["total"].append(loss)
     epoch_losses["output"].append(output_loss)

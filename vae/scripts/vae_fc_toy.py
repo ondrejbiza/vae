@@ -7,7 +7,7 @@ from .. import vae_fc
 
 train_data = toy_dataset.get_dataset()
 
-model = vae_fc.VAE([2], [120, 120], [120, 120, 2], 120, vae_fc.VAE.LossType.L2, 0.0005, 0.0001)
+model = vae_fc.VAE([2], [16, 16], [16, 16, 2], 2, vae_fc.VAE.LossType.L2, 0.0001, 0.001, beta=0.1)
 
 model.start_session()
 
@@ -17,7 +17,7 @@ epoch_size = len(train_data) // batch_size
 losses = collections.defaultdict(list)
 epoch_losses = collections.defaultdict(list)
 
-for train_step in range(100000):
+for train_step in range(10000):
 
     epoch_step = train_step % epoch_size
 
@@ -43,7 +43,17 @@ for train_step in range(100000):
     epoch_losses["regularization"].append(reg_loss)
 
 samples = model.predict(400)
+encodings = model.encode(train_data)
+
 model.stop_session()
+
+# plot embeddings
+b = encodings.shape[0] // 4
+
+for i in range(4):
+    plt.scatter(encodings[i * b: (i + 1) * b, 0], encodings[i * b: (i + 1) * b, 1], label="cluster {:d}".format(i))
+plt.legend()
+plt.show()
 
 # plot samples
 plt.scatter(samples[:, 0], samples[:, 1])
