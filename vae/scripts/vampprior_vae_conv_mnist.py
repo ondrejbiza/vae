@@ -19,10 +19,15 @@ def main(args):
 
     # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
     # in all fully-connected and convolutional layers
+    if args.no_pseudo_input_activation:
+        pia = None
+    else:
+        pia = utils.hardtanh
+
     model = VAMPPRIOR_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
         32, VAMPPRIOR_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        args.num_pseudo_inputs, pseudo_inputs_activation=utils.hardtanh, beta1=1.0, beta2=1.0
+        args.num_pseudo_inputs, pseudo_inputs_activation=pia, beta1=1.0, beta2=1.0
     )
 
     model.start_session()
@@ -108,11 +113,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--disable-kl-loss", default=False, action="store_true")
     parser.add_argument("--num-training-steps", type=int, default=60000)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0005)
     parser.add_argument("--num-pseudo-inputs", type=int, default=10)
+    parser.add_argument("--no-pseudo-input-activation", default=False, action="store_true")
 
     parsed = parser.parse_args()
     main(parsed)

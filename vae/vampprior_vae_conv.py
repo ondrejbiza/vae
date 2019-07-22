@@ -1,7 +1,6 @@
 from enum import Enum
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 from . import utils
 from .model import Model
 
@@ -192,7 +191,7 @@ class VAMPPRIOR_VAE(Model):
             if self.pseudo_inputs_activation is not None:
                 self.pseudo_inputs_t = self.pseudo_inputs_activation(self.pseudo_inputs_t)
 
-            self.pseudo_mu_t, self.pseudo_var_t = self.build_encoder(self.pseudo_inputs_t, reuse=True)
+            self.pseudo_mu_t, self.pseudo_logvar_t = self.build_encoder(self.pseudo_inputs_t, reuse=True)
 
             # middle
             with tf.variable_scope("middle"):
@@ -214,13 +213,16 @@ class VAMPPRIOR_VAE(Model):
                     (self.latent_space_size / 2) * (1 + np.log(2 * np.pi))
 
                 # calculate prior expectation
-                self.pseudo_dist = tfp.distributions.MultivariateNormalDiag(self.pseudo_mu_t, self.pseudo_var_t)
-
-                self.sample_probs_t = self.pseudo_dist.log_prob(self.sample_t[:, tf.newaxis, :])
+                self.pseudo_var_t = tf.exp(self.pseudo_logvar_t)
+                self.sample_probs_t = utils.many_multivariate_normals_log_pdf(
+                    self.sample_t, self.pseudo_mu_t, self.pseudo_var_t, self.pseudo_logvar_t
+                )
                 self.sample_probs_t -= np.log(self.num_pseudo_inputs)
 
-                d_max = tf.reduce_max(self.sample_probs_t, axis=1)[:, tf.newaxis]
-                self.pseudo_expectation_t = d_max + tf.log(tf.reduce_sum(tf.exp(self.sample_probs_t - d_max), axis=1))
+                d_max = tf.reduce_max(self.sample_probs_t, axis=1)
+                self.pseudo_expectation_t = d_max + tf.log(
+                    tf.reduce_sum(tf.exp(self.sample_probs_t - d_max[:, tf.newaxis]), axis=1)
+                )
 
             # decoder
             self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.sample_t)
