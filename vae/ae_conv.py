@@ -150,27 +150,23 @@ class AE(Model):
         with tf.variable_scope(self.TRAINING_NAMESPACE):
 
             if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
-                self.output_loss_t = tf.reduce_mean(
-                    tf.reduce_sum(
-                        tf.losses.sigmoid_cross_entropy(
-                            multi_class_labels=self.input_flat_t, logits=self.flat_logits_t,
-                            reduction=tf.losses.Reduction.NONE
-                        ),
-                        axis=1
+                self.full_output_loss_t = tf.reduce_sum(
+                    tf.losses.sigmoid_cross_entropy(
+                        multi_class_labels=self.input_flat_t, logits=self.flat_logits_t,
+                        reduction=tf.losses.Reduction.NONE
                     ),
-                    axis=0
+                    axis=1
                 )
             else:
-                self.output_loss_t = tf.reduce_mean(
-                    tf.reduce_sum(
-                        tf.losses.mean_squared_error(
-                            labels=self.input_flat_t, logits=self.flat_logits_t,
-                            predictions=tf.losses.Reduction.NONE
-                        ),
-                        axis=1
+                self.full_output_loss_t = tf.reduce_sum(
+                    tf.losses.mean_squared_error(
+                        labels=self.input_flat_t, predictions=self.flat_logits_t,
+                        reduction=tf.losses.Reduction.NONE
                     ),
-                    axis=0
+                    axis=1
                 )
+
+            self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
