@@ -1,10 +1,13 @@
 import argparse
+import os
 import collections
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 from .. import toy_dataset
 from .. import vampprior_vae_fc
+
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 
 def main(args):

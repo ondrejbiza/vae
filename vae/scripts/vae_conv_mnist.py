@@ -59,7 +59,10 @@ def main(args):
         epoch_losses["regularization"].append(reg_loss)
 
     samples = model.predict(25)
+    test_lls = model.get_log_likelihood(eval_data)
     model.stop_session()
+
+    print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
 
     # plot samples
     _, axes = plt.subplots(nrows=5, ncols=5)

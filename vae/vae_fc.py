@@ -1,11 +1,11 @@
-import os
 from enum import Enum
 import numpy as np
 import tensorflow as tf
 from . import utils
+from .model import Model
 
 
-class VAE:
+class VAE(Model):
 
     MODEL_NAMESPACE = "model"
     TRAINING_NAMESPACE = "training"
@@ -17,6 +17,8 @@ class VAE:
 
     def __init__(self, input_shape, encoder_neurons, decoder_neurons, latent_space_size, loss_type,
                  weight_decay, learning_rate, beta=1.0):
+
+        super(Model, self).__init__()
 
         assert loss_type in self.LossType
 
@@ -185,25 +187,3 @@ class VAE:
             self.loss_t = self.output_loss_t + self.beta * self.kl_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
-
-    def start_session(self):
-
-        self.session = tf.Session()
-        self.session.run(tf.global_variables_initializer())
-
-    def stop_session(self):
-
-        if self.session is not None:
-            self.session.close()
-
-    def save(self, path):
-
-        dir_name = os.path.dirname(path)
-        if not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-
-        self.saver.save(self.session, path)
-
-    def load(self, path):
-
-        self.saver.restore(self.session, path)

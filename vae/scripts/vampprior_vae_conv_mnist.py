@@ -22,7 +22,7 @@ def main(args):
     model = VAMPPRIOR_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
         32, VAMPPRIOR_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        args.num_pseudo_inputs, pseudo_inputs_activation=utils.hardtanh, beta1=0.0, beta2=0.0
+        args.num_pseudo_inputs, pseudo_inputs_activation=utils.hardtanh, beta1=1.0, beta2=1.0
     )
 
     model.start_session()
@@ -60,9 +60,28 @@ def main(args):
         epoch_losses["prior loss"].append(prior_loss)
         epoch_losses["regularization"].append(reg_loss)
 
-    samples, pseudo_inputs = model.predict(25)
+    samples, _ = model.predict(25)
     samples = samples[:, :, :, 0]
+    pseudo_inputs = model.get_pseudo_inputs()
+    test_lls = model.get_log_likelihood(eval_data)
     model.stop_session()
+
+    print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
+
+    # plot pseudo-inputs
+    _, axes = plt.subplots(nrows=5, ncols=5)
+
+    for i in range(25):
+
+        if i >= len(pseudo_inputs):
+            break
+
+        axis = axes[i // 5, i % 5]
+
+        axis.imshow(pseudo_inputs[i], vmin=0, vmax=1, cmap="gray")
+        axis.axis("off")
+
+    plt.show()
 
     # plot samples
     _, axes = plt.subplots(nrows=5, ncols=5)
@@ -93,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-training-steps", type=int, default=60000)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0005)
-    parser.add_argument("--num-pseudo-inputs", type=int, default=4)
+    parser.add_argument("--num-pseudo-inputs", type=int, default=10)
 
     parsed = parser.parse_args()
     main(parsed)

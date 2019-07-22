@@ -1,12 +1,12 @@
-import os
 from enum import Enum
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from . import utils
+from .model import Model
 
 
-class VAMPPRIOR_VAE:
+class VAMPPRIOR_VAE(Model):
 
     MODEL_NAMESPACE = "model"
     TRAINING_NAMESPACE = "training"
@@ -19,6 +19,8 @@ class VAMPPRIOR_VAE:
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
                  weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0):
+
+        super(Model, self).__init__()
 
         assert loss_type in self.LossType
 
@@ -60,7 +62,6 @@ class VAMPPRIOR_VAE:
         self.output_loss_t = None
         self.loss_t = None
         self.step_op = None
-        self.session = None
 
         self.build_placeholders()
         self.build_network()
@@ -94,6 +95,10 @@ class VAMPPRIOR_VAE:
         )
 
         return loss, output_loss, entropy_loss, prior_loss, reg_loss
+
+    def get_pseudo_inputs(self):
+
+        return self.session.run(self.pseudo_inputs_t)
 
     def build_placeholders(self):
 
@@ -230,27 +235,23 @@ class VAMPPRIOR_VAE:
         with tf.variable_scope(self.TRAINING_NAMESPACE):
 
             if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
-                self.output_loss_t = tf.reduce_mean(
-                    tf.reduce_sum(
-                        tf.losses.sigmoid_cross_entropy(
-                            multi_class_labels=self.input_flat_t, logits=self.flat_logits_t,
-                            reduction=tf.losses.Reduction.NONE
-                        ),
-                        axis=1
+                self.full_output_loss_t = tf.reduce_sum(
+                    tf.losses.sigmoid_cross_entropy(
+                        multi_class_labels=self.input_flat_t, logits=self.flat_logits_t,
+                        reduction=tf.losses.Reduction.NONE
                     ),
-                    axis=0
+                    axis=1
                 )
             else:
-                self.output_loss_t = tf.reduce_mean(
-                    tf.reduce_sum(
-                        tf.losses.mean_squared_error(
-                            labels=self.input_flat_t, predictions=self.flat_logits_t,
-                            reduction=tf.losses.Reduction.NONE
-                        ),
-                        axis=1
+                self.full_output_loss_t = tf.reduce_sum(
+                    tf.losses.mean_squared_error(
+                        labels=self.input_flat_t, predictions=self.flat_logits_t,
+                        reduction=tf.losses.Reduction.NONE
                     ),
-                    axis=0
+                    axis=1
                 )
+
+            self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.entropy_loss_t = - tf.reduce_mean(self.encoder_entropy_t, axis=0)
 
@@ -262,25 +263,3 @@ class VAMPPRIOR_VAE:
                 self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
-
-    def start_session(self):
-
-        self.session = tf.Session()
-        self.session.run(tf.global_variables_initializer())
-
-    def stop_session(self):
-
-        if self.session is not None:
-            self.session.close()
-
-    def save(self, path):
-
-        dir_name = os.path.dirname(path)
-        if not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-
-        self.saver.save(self.session, path)
-
-    def load(self, path):
-
-        self.saver.restore(self.session, path)

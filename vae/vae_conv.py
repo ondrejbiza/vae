@@ -1,11 +1,11 @@
-import os
 from enum import Enum
 import numpy as np
 import tensorflow as tf
 from . import utils
+from .model import Model
 
 
-class VAE:
+class VAE(Model):
 
     MODEL_NAMESPACE = "model"
     TRAINING_NAMESPACE = "training"
@@ -18,6 +18,8 @@ class VAE:
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
                  weight_decay, learning_rate, disable_kl_loss=False):
+
+        super(Model, self).__init__()
 
         assert loss_type in self.LossType
         assert len(encoder_filters) == len(encoder_filter_sizes) == len(encoder_strides)
@@ -219,27 +221,23 @@ class VAE:
         with tf.variable_scope(self.TRAINING_NAMESPACE):
 
             if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
-                self.output_loss_t = tf.reduce_mean(
-                    tf.reduce_sum(
-                        tf.losses.sigmoid_cross_entropy(
-                            multi_class_labels=self.input_flat_t, logits=self.flat_logits_t,
-                            reduction=tf.losses.Reduction.NONE
-                        ),
-                        axis=1
+                self.full_output_loss_t = tf.reduce_sum(
+                    tf.losses.sigmoid_cross_entropy(
+                        multi_class_labels=self.input_flat_t, logits=self.flat_logits_t,
+                        reduction=tf.losses.Reduction.NONE
                     ),
-                    axis=0
+                    axis=1
                 )
             else:
-                self.output_loss_t = tf.reduce_mean(
-                    tf.reduce_sum(
-                        tf.losses.mean_squared_error(
-                            labels=self.input_flat_t, predictions=self.flat_logits_t,
-                            reduction=tf.losses.Reduction.NONE
-                        ),
-                        axis=1
+                self.full_output_loss_t = tf.reduce_sum(
+                    tf.losses.mean_squared_error(
+                        labels=self.input_flat_t, predictions=self.flat_logits_t,
+                        reduction=tf.losses.Reduction.NONE
                     ),
-                    axis=0
+                    axis=1
                 )
+
+            self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.kl_loss_t = tf.reduce_mean(tf.reduce_sum(self.kl_divergence_t, axis=1))
 
@@ -251,31 +249,3 @@ class VAE:
                 self.loss_t = self.output_loss_t + self.kl_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
-
-    def start_session(self, gpu_memory=None):
-
-        gpu_options = None
-        if gpu_memory is not None:
-            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory)
-
-        tf_config = tf.ConfigProto(gpu_options=gpu_options)
-
-        self.session = tf.Session(config=tf_config)
-        self.session.run(tf.global_variables_initializer())
-
-    def stop_session(self):
-
-        if self.session is not None:
-            self.session.close()
-
-    def save(self, path):
-
-        dir_name = os.path.dirname(path)
-        if not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-
-        self.saver.save(self.session, path)
-
-    def load(self, path):
-
-        self.saver.restore(self.session, path)
