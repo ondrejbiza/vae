@@ -16,9 +16,9 @@ class VAE(Model):
         L2 = 2
 
     def __init__(self, input_shape, encoder_neurons, decoder_neurons, latent_space_size, loss_type,
-                 weight_decay, learning_rate, beta=1.0):
+                 weight_decay, learning_rate, beta=1.0, fix_cudnn=False):
 
-        super(Model, self).__init__()
+        super(VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
 

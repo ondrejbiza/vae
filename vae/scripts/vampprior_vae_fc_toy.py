@@ -20,7 +20,7 @@ def main(args):
 
     model = vampprior_vae_fc.VAMPPRIOR_VAE(
         [2], [16, 16], [16, 16, 2], 2, vampprior_vae_fc.VAMPPRIOR_VAE.LossType.L2, args.learning_rate,
-        args.weight_decay, args.num_pseudo_inputs, beta1=1.0, beta2=1.0
+        args.weight_decay, args.num_pseudo_inputs, beta1=1.0, beta2=1.0, fix_cudnn=args.fix_cudnn
     )
 
     model.start_session()
@@ -89,6 +89,8 @@ if __name__ == "__main__":
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0001)
     parser.add_argument("--num-pseudo-inputs", type=int, default=4)
+
+    parser.add_argument("--fix-cudnn", default=False, action="store_true")
 
     parsed = parser.parse_args()
     main(parsed)

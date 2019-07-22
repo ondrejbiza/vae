@@ -2,12 +2,13 @@ import os
 from abc import ABC
 import numpy as np
 import tensorflow as tf
-from tensorflow.compat.v1 import ConfigProto
 
 
 class Model(ABC):
 
-    def __init__(self):
+    def __init__(self, fix_cudnn=False):
+
+        self.fix_cudnn = fix_cudnn
 
         self.input_pl = NotImplemented
         self.full_output_loss_t = NotImplemented
@@ -34,8 +35,12 @@ class Model(ABC):
     def start_session(self):
 
         # prevents a cuDNN initialization error in TF 1.14 with CUDA 10.0 and cuDNN 7.6
-        config = ConfigProto()
-        config.gpu_options.allow_growth = True
+        if self.fix_cudnn:
+            from tensorflow.compat.v1 import ConfigProto
+            config = ConfigProto()
+            config.gpu_options.allow_growth = True
+        else:
+            config = None
 
         self.session = tf.Session(config=config)
         self.session.run(tf.global_variables_initializer())

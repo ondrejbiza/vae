@@ -17,9 +17,10 @@ class VAMPPRIOR_VAE(Model):
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
-                 weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0):
+                 weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0,
+                 fix_cudnn=False):
 
-        super(Model, self).__init__()
+        super(VAMPPRIOR_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
 

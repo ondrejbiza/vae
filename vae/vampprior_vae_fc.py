@@ -15,10 +15,11 @@ class VAMPPRIOR_VAE(Model):
         SIGMOID_CROSS_ENTROPY = 1
         L2 = 2
 
-    def __init__(self, input_shape, encoder_neurons, decoder_neurons, latent_space_size, loss_type,
-                 weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0):
+    def __init__(self, input_shape, encoder_neurons, decoder_neurons, latent_space_size, loss_type, weight_decay,
+                 learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0,
+                 fix_cudnn=False):
 
-        super(Model, self).__init__()
+        super(VAMPPRIOR_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
 

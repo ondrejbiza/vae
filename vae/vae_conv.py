@@ -17,9 +17,9 @@ class VAE(Model):
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
-                 weight_decay, learning_rate, disable_kl_loss=False):
+                 weight_decay, learning_rate, disable_kl_loss=False, fix_cudnn=False):
 
-        super(Model, self).__init__()
+        super(VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
         assert len(encoder_filters) == len(encoder_filter_sizes) == len(encoder_strides)
