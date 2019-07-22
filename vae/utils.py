@@ -9,3 +9,8 @@ def get_weight_regularizer(weight_decay):
     """
 
     return tf.contrib.layers.l2_regularizer(weight_decay)
+
+
+def hardtanh(x):
+
+    return tf.minimum(tf.maximum(-1.0, x), 1.0)
