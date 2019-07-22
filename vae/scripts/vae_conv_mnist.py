@@ -1,5 +1,6 @@
 import argparse
 import collections
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
@@ -8,6 +9,9 @@ from .. import vae_conv
 
 
 def main(args):
+
+    if args.gpus is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
 
     ((train_data, train_labels), (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data()
     train_data = train_data / 255.0
@@ -93,6 +97,8 @@ if __name__ == "__main__":
     parser.add_argument("--num-training-steps", type=int, default=60000)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0005)
+
+    parser.add_argument("--gpus")
 
     parsed = parser.parse_args()
     main(parsed)
