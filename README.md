@@ -9,16 +9,19 @@
 
 * Install Python >= 3.6.
 * Install packages in *requirements.txt*.
-
+* Tested with tensorflow-gpu 1.7.0 (CUDA 9.1, cuDNN 7.1) and tensorflow-gpu 1.14.0 (CUDA 10.0, cuDNN 7.6).
+* For tensorflow-gpu 1.14.0, use the flag --fix-cudnn if you get a cuDNN initialization error.
 ## Usage
 
-###Autoencoder:
+### Autoencoder:
 ```
 # ConvNet on MNIST
 python -m vae.scripts.ae_conv_mnist
 ```
 
-###Variational Autoencoder (VAE):
+MNIST, default settings: -54.26 test log-likelihood (1 run)
+
+### Variational Autoencoder (VAE):
 
 ```
 # ConvNet on MNIST
@@ -30,9 +33,9 @@ python -m vae.scripts.vae_fc_mnist
 
 Paper: https://arxiv.org/abs/1312.6114
 
-MNIST, ConvNet, default settings: -71.52 test negative log-likelihood (1 run)
+MNIST, ConvNet, default settings: -71.52 test log-likelihood (1 run)
 
-###VampPrior VAE:
+### VampPrior VAE:
 
 ```
 # ConvNet on MNIST
@@ -44,9 +47,9 @@ python -m vae.scripts.vampprior_vae_fc_toy
 
 Paper: https://arxiv.org/abs/1705.07120
 
-MNIST, default settings: -70.08 test negative log-likelihood (1 run)
+MNIST, default settings: -70.08 test log-likelihood (1 run)
 
-###Softmax-Gumbel VAE:
+### Softmax-Gumbel VAE:
 
 ```
 ConvNet on MNIST
@@ -55,6 +58,7 @@ python -m .vae.scripts.sg_vae_conv_mnist
 
 Paper: https://arxiv.org/abs/1611.01144
 
+MNIST, default settings: -81.56 test log-likelihood (1 run)
 
 ## Notes
 
