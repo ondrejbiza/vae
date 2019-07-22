@@ -1,38 +1,59 @@
 # Variational Autoencoders in Tensorflow
 
-My implementation is based on [this tutorial](https://arxiv.org/abs/1606.05908) and 
-[this open-source caffe code](https://github.com/cdoersch/vae_tutorial).
+![vae_mnist_samples](vae/results/vae_conv_samples.png)
+![vae_mnist_losses](vae/results/vae_conv_losses.png)
+
+## Set up
+
+* Install Python >= 3.6.
+* Install packages in *requirements.txt*.
+
+## Usage
+
+###Autoencoder:
+```
+# ConvNet on MNIST
+python -m vae.scripts.ae_conv_mnist
+```
+
+###Variational Autoencoder (VAE):
 
 ```
-# fully-connected autoencoder on MNIST
-python -m vae.scripts.vae_fc_mnist
-
-# convolutional autoencoder on MNIST
+# ConvNet on MNIST
 python -m vae.scripts.vae_conv_mnist
 
-# categorical convolutional autoencoder with Gumbel-Softmax on MNIST
-python -m vae.scripts.sg_vae_conv_mnist
+# fully-connected net on MNIST
+python -m vae.scripts.vae_fc_mnist
 ```
 
-Samples from a fully-connected autoencoder:
+Paper: https://arxiv.org/abs/1312.6114
 
-![samples_fc](vae/results/vae_fc_samples.png)
+MNIST, ConvNet, default settings: -71.52 test negative log-likelihood (1 run)
 
-Samples from a convolutional autoencoder:
+###VampPrior VAE:
 
-![samples_conv](vae/results/vae_conv_samples.png)
+```
+# ConvNet on MNIST
+python -m vae.scripts.vampprior_vae_conv
 
-Samples from a Gumbel-Softmax Categorical VAE:
+# fully-connected net on a toy dataset
+python -m vae.scripts.vampprior_vae_fc_toy
+```
 
-Categorical KL divergence:
+Paper: https://arxiv.org/abs/1705.07120
 
-![cat_gs_vae](vae/results/gs_vae_samples_categorical_kl_500_1e4_samples.png)
+MNIST, default settings: -70.08 test negative log-likelihood (1 run)
 
-Relative KL divergence:
+###Softmax-Gumbel VAE:
 
-![rel_gs_vae](vae/results/gs_vae_samples_relaxed_kl_500_1e4_samples.png)
+```
+ConvNet on MNIST
+python -m .vae.scripts.sg_vae_conv_mnist
+```
 
-Straight-through:
+Paper: https://arxiv.org/abs/1611.01144
 
-![st_gs_vae](vae/results/gs_vae_samples_straight_through_500_1e4_samples.png)
 
+## Notes
+
+* The architecture of all ConvNets is based on this paper (https://arxiv.org/abs/1803.10122) with half the filters.

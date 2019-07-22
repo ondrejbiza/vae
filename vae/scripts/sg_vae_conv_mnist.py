@@ -31,7 +31,8 @@ def main(args):
     model = sg_vae_conv.SG_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
         20, 10, sg_vae_conv.SG_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        kl_type, disable_kl_loss=args.disable_kl_loss, straight_through=args.straight_through
+        kl_type, disable_kl_loss=args.disable_kl_loss, straight_through=args.straight_through,
+        fix_cudnn=args.fix_cudnn
     )
 
     model.build_all()
@@ -71,7 +72,10 @@ def main(args):
         epoch_losses["regularization"].append(reg_loss)
 
     samples = model.predict(25)
+    test_lls = model.get_log_likelihood(eval_data)
     model.stop_session()
+
+    print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
 
     # plot samples
     _, axes = plt.subplots(nrows=5, ncols=5)
@@ -107,6 +111,8 @@ if __name__ == "__main__":
     parser.add_argument("--temp-mult", type=float, default=-1e-4)
     parser.add_argument("--temp-threshold", type=float, default=0.5)
     parser.add_argument("--temp-step", type=int, default=500)
+
+    parser.add_argument("--fix-cudnn", default=False, action="store_true")
 
     parsed = parser.parse_args()
     main(parsed)

@@ -3,9 +3,10 @@ from enum import Enum
 import numpy as np
 import tensorflow as tf
 from . import utils
+from .model import Model
 
 
-class SG_VAE:
+class SG_VAE(Model):
     # https://github.com/ericjang/gumbel-softmax/blob/master/gumbel_softmax_vae_v2.ipynb
 
     MODEL_NAMESPACE = "model"
@@ -22,7 +23,9 @@ class SG_VAE:
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, num_distributions,
                  num_classes, loss_type, weight_decay, learning_rate, kl_type, disable_kl_loss=False,
-                 straight_through=False):
+                 straight_through=False, fix_cudnn=False):
+
+        super(SG_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
         assert len(encoder_filters) == len(encoder_filter_sizes) == len(encoder_strides)
@@ -284,31 +287,3 @@ class SG_VAE:
                 self.loss_t = self.output_loss_t + self.kl_loss_t + self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
-
-    def start_session(self, gpu_memory=None):
-
-        gpu_options = None
-        if gpu_memory is not None:
-            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory)
-
-        tf_config = tf.ConfigProto(gpu_options=gpu_options)
-
-        self.session = tf.Session(config=tf_config)
-        self.session.run(tf.global_variables_initializer())
-
-    def stop_session(self):
-
-        if self.session is not None:
-            self.session.close()
-
-    def save(self, path):
-
-        dir_name = os.path.dirname(path)
-        if not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-
-        self.saver.save(self.session, path)
-
-    def load(self, path):
-
-        self.saver.restore(self.session, path)

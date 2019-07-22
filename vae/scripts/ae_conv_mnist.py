@@ -20,7 +20,7 @@ def main(args):
     # in all fully-connected and convolutional layers
     model = ae_conv.AE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
-        32, ae_conv.AE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate
+        32, ae_conv.AE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate, fix_cudnn=args.fix_cudnn
     )
 
     model.start_session()
@@ -55,7 +55,10 @@ def main(args):
         epoch_losses["regularization"].append(reg_loss)
 
     samples = model.predict(25)
+    test_lls = model.get_log_likelihood(eval_data)
     model.stop_session()
+
+    print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
 
     # plot samples
     _, axes = plt.subplots(nrows=5, ncols=5)
@@ -85,6 +88,8 @@ if __name__ == "__main__":
     parser.add_argument("--num-training-steps", type=int, default=60000)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0005)
+
+    parser.add_argument("--fix-cudnn", default=False, action="store_true")
 
     parsed = parser.parse_args()
     main(parsed)
