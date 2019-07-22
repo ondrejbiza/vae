@@ -80,8 +80,8 @@ class VAMPPRIOR_VAE:
 
     def train(self, samples):
 
-        _, loss, output_loss, entropy_loss, prior_loss, reg_loss, pm = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.entropy_loss_t, self.prior_loss_t, self.reg_loss_t, self.pseudo_mu_t],
+        _, loss, output_loss, entropy_loss, prior_loss, reg_loss, sp = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.entropy_loss_t, self.prior_loss_t, self.reg_loss_t, self.sample_probs_t],
             feed_dict={
                 self.input_pl: samples
             }
@@ -159,10 +159,13 @@ class VAMPPRIOR_VAE:
                     (self.latent_space_size / 2) * (1 + np.log(2 * np.pi))
 
                 # calculate prior expectation
-                # TODO: wrong?
                 self.pseudo_dist = tfp.distributions.MultivariateNormalDiag(self.pseudo_mu_t, self.pseudo_var_t)
-                self.sample_probs_t = self.pseudo_dist.prob(self.sample_t[:, tf.newaxis, :])
-                self.pseudo_expectation_t = tf.log(tf.reduce_mean(self.sample_probs_t, axis=1) + 1e-6)
+
+                self.sample_probs_t = self.pseudo_dist.log_prob(self.sample_t[:, tf.newaxis, :])
+                self.sample_probs_t -= np.log(self.num_pseudo_inputs)
+
+                d_max = tf.reduce_max(self.sample_probs_t, axis=1)[:, tf.newaxis]
+                self.pseudo_expectation_t = d_max + tf.log(tf.reduce_sum(tf.exp(self.sample_probs_t - d_max), axis=1))
 
             # decoder
             x = self.sample_t
