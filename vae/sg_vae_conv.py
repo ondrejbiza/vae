@@ -117,6 +117,25 @@ class SG_VAE(Model):
 
         return loss, output_loss, kl_loss, reg_loss
 
+    def get_log_likelihood(self, data, batch_size=100):
+
+        num_steps = int(np.ceil(data.shape[0] / batch_size))
+        lls = []
+
+        for idx in range(num_steps):
+
+            ll = self.session.run(self.full_output_loss_t, feed_dict={
+                self.input_pl: data[idx * batch_size: (idx + 1) * batch_size],
+                self.is_training_pl: False,
+                self.temperature_pl: 1.0
+            })
+
+            lls.append(ll)
+
+        lls = - np.concatenate(lls, axis=0)
+
+        return lls
+
     def build_all(self):
 
         self.build_placeholders()

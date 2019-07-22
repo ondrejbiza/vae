@@ -1,7 +1,9 @@
 # Variational Autoencoders in Tensorflow
 
-<img src="vae/results/vae_conv_samples.png" alt="vae_mnist_samples" width="200"/>
-<img src="vae/results/vae_conv_losses.png" alt="vae_mnist_losses" width="200"/>
+<p float="left">
+    <img src="vae/results/vae_conv_samples.png" alt="vae_mnist_samples" width="350"/>
+    <img src="vae/results/vae_conv_losses.png" alt="vae_mnist_losses" width="350"/>
+</p>
 
 ## Set up
 
