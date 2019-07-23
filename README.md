@@ -39,7 +39,7 @@ MNIST, ConvNet, default settings: -71.52 test log-likelihood (1 run)
 
 ```
 # ConvNet on MNIST
-python -m vae.scripts.vampprior_vae_conv
+python -m vae.scripts.vampprior_vae_conv_mnist
 
 # fully-connected net on a toy dataset
 python -m vae.scripts.vampprior_vae_fc_toy
@@ -53,7 +53,7 @@ MNIST, default settings: -70.08 test log-likelihood (1 run)
 
 ```
 ConvNet on MNIST
-python -m .vae.scripts.sg_vae_conv_mnist
+python -m vae.scripts.sg_vae_conv_mnist
 ```
 
 Paper: https://arxiv.org/abs/1611.01144
