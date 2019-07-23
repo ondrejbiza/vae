@@ -5,7 +5,7 @@ from . import utils
 from .model import Model
 
 
-class VAMPPRIOR_VAE(Model):
+class GMPRIOR_VAE(Model):
 
     MODEL_NAMESPACE = "model"
     TRAINING_NAMESPACE = "training"
@@ -17,10 +17,9 @@ class VAMPPRIOR_VAE(Model):
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
-                 weight_decay, learning_rate, num_pseudo_inputs, pseudo_inputs_activation=None, beta1=1.0, beta2=1.0,
-                 fix_cudnn=False):
+                 weight_decay, learning_rate, num_components, beta1=1.0, beta2=1.0, fix_cudnn=False):
 
-        super(VAMPPRIOR_VAE, self).__init__(fix_cudnn=fix_cudnn)
+        super(GMPRIOR_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
 
@@ -38,8 +37,7 @@ class VAMPPRIOR_VAE(Model):
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
-        self.num_pseudo_inputs = num_pseudo_inputs
-        self.pseudo_inputs_activation = pseudo_inputs_activation
+        self.num_components = num_components
         self.beta1 = beta1
         self.beta2 = beta2
 
@@ -50,14 +48,20 @@ class VAMPPRIOR_VAE(Model):
         self.sd_t = None
         self.var_t = None
         self.mean_sq_t = None
-        self.pseudo_inputs_t = None
-        self.pseudo_mu_t = None
-        self.pseudo_var_t = None
+        self.mixtures_mu_v = None
+        self.mixtures_var_t = None
+        self.mixtures_logvar_v = None
+        self.encoder_entropy_t = None
+        self.pseudo_expectation_t = None
+        self.sample_probs_t = None
+        self.entropy_loss_t = None
+        self.prior_loss_t = None
         self.reg_loss_t = None
         self.noise_t = None
         self.sd_noise_t = None
         self.sample_t = None
         self.logits_t = None
+        self.flat_logits_t = None
         self.output_t = None
         self.output_loss_t = None
         self.loss_t = None
@@ -73,16 +77,16 @@ class VAMPPRIOR_VAE(Model):
 
     def predict(self, num_samples):
 
-        pseudo_mu, pseudo_var = self.session.run([self.pseudo_mu_t, self.pseudo_var_t])
-        assignments = np.random.randint(0, self.num_pseudo_inputs, size=num_samples)
+        mixtures_mu, mixtures_var = self.session.run([self.mixtures_mu_v, self.mixtures_var_t])
+        assignments = np.random.randint(0, self.num_components, size=num_samples)
 
         flat_outputs = self.session.run(self.output_t, feed_dict={
-            self.mu_t: pseudo_mu[assignments],
-            self.sd_t: np.sqrt(pseudo_var[assignments])
+            self.mu_t: mixtures_mu[assignments],
+            self.sd_t: np.sqrt(mixtures_var[assignments])
 
         })
 
-        return flat_outputs, pseudo_mu
+        return flat_outputs, mixtures_mu
 
     def train(self, samples):
 
@@ -96,9 +100,9 @@ class VAMPPRIOR_VAE(Model):
 
         return loss, output_loss, entropy_loss, prior_loss, reg_loss
 
-    def get_pseudo_inputs(self):
+    def get_mixtures(self):
 
-        return self.session.run(self.pseudo_inputs_t)
+        return self.session.run([self.mixtures_mu_v, self.mixtures_var_t])
 
     def build_placeholders(self):
 
@@ -183,16 +187,17 @@ class VAMPPRIOR_VAE(Model):
             # encoder
             self.mu_t, self.log_var_t = self.build_encoder(self.input_pl)
 
-            # pseudo inputs
-            self.pseudo_inputs_t = tf.get_variable(
-                "pseudo_inputs", initializer=tf.random_normal_initializer(
+            # mixtures
+            self.mixtures_mu_v = tf.get_variable(
+                "mixtures_mu", initializer=tf.random_normal_initializer(
                     mean=0.0, stddev=0.1, dtype=tf.float32
-                ), shape=(self.num_pseudo_inputs, *self.input_shape)
+                ), shape=(self.num_components, self.latent_space_size)
             )
-            if self.pseudo_inputs_activation is not None:
-                self.pseudo_inputs_t = self.pseudo_inputs_activation(self.pseudo_inputs_t)
-
-            self.pseudo_mu_t, self.pseudo_logvar_t = self.build_encoder(self.pseudo_inputs_t, reuse=True)
+            self.mixtures_logvar_v = tf.get_variable(
+                "mixtures_var", initializer=tf.random_normal_initializer(
+                    mean=-1.0, stddev=0.1, dtype=tf.float32
+                ), shape=(self.num_components, self.latent_space_size)
+            )
 
             # middle
             with tf.variable_scope("middle"):
@@ -214,11 +219,12 @@ class VAMPPRIOR_VAE(Model):
                     (self.latent_space_size / 2) * (1 + np.log(2 * np.pi))
 
                 # calculate prior expectation
-                self.pseudo_var_t = tf.exp(self.pseudo_logvar_t)
+                self.mixtures_var_t = tf.exp(self.mixtures_logvar_v)
+
                 self.sample_probs_t = utils.many_multivariate_normals_log_pdf(
-                    self.sample_t, self.pseudo_mu_t, self.pseudo_var_t, self.pseudo_logvar_t
+                    self.sample_t, self.mixtures_mu_v, self.mixtures_var_t, self.mixtures_logvar_v
                 )
-                self.sample_probs_t -= np.log(self.num_pseudo_inputs)
+                self.sample_probs_t -= np.log(self.num_components)
 
                 d_max = tf.reduce_max(self.sample_probs_t, axis=1)
                 self.pseudo_expectation_t = d_max + tf.log(

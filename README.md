@@ -49,6 +49,18 @@ Paper: https://arxiv.org/abs/1705.07120
 
 MNIST, default settings: -70.08 test log-likelihood (1 run)
 
+### Gaussian Mixture Prior VAE:
+
+```
+# ConvNet on MNIST
+python -m vae.scripts.gmprior_vae_conv_mnist
+
+# fully-connected net on a toy dataset
+python -m vae.scripts.gmprior_vae_fc_toy
+```
+
+Baseline from https://arxiv.org/abs/1705.07120
+
 ### Softmax-Gumbel VAE:
 
 ```
