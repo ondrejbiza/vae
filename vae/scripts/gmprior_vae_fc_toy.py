@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--num-training-steps", type=int, default=50000)
+    parser.add_argument("--num-training-steps", type=int, default=10000)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--weight-decay", type=float, default=0.0001)
     parser.add_argument("--num-components", type=int, default=4)

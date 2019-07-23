@@ -168,7 +168,7 @@ class GMPRIOR_VAE(Model):
                 self.mixtures_var_t = tf.exp(self.mixtures_logvar_v)
 
                 self.sample_probs_t = utils.many_multivariate_normals_log_pdf(
-                    self.sample_t, self.mixtures_mu_v, self.mixtures_logvar_v, self.mixtures_var_t
+                    self.sample_t, self.mixtures_mu_v, self.mixtures_var_t, self.mixtures_logvar_v
                 )
                 self.sample_probs_t -= np.log(self.num_components)
 

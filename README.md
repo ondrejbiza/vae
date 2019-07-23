@@ -61,6 +61,8 @@ python -m vae.scripts.gmprior_vae_fc_toy
 
 Baseline from https://arxiv.org/abs/1705.07120
 
+MNIST, ConvNet, default settings: -69.58 test log-likelihood (1 run)
+
 ### Softmax-Gumbel VAE:
 
 ```
