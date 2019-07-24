@@ -66,7 +66,7 @@ MNIST, ConvNet, default settings: -69.58 test log-likelihood (1 run)
 ### Softmax-Gumbel VAE:
 
 ```
-ConvNet on MNIST
+# ConvNet on MNIST
 python -m vae.scripts.sg_vae_conv_mnist
 ```
 
