@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import tensorflow as tf
 
 
@@ -29,3 +30,16 @@ def many_multivariate_normals_log_pdf(x, mu, var, logvar):
     term3 = - (1 / 2) * tf.reduce_sum(tf.square(x - mu) / var, axis=2)
 
     return term1 + term2 + term3
+
+
+def plot_square(images):
+
+    n = int(np.sqrt(len(images)))
+
+    _, axes = plt.subplots(nrows=5, ncols=5)
+
+    for i in range(len(images)):
+        axis = axes[i // n, i % n]
+
+        axis.imshow(images[i], vmin=0, vmax=1, cmap="gray")
+        axis.axis("off")

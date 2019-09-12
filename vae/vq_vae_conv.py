@@ -23,8 +23,8 @@ class VQ_VAE(Model):
         L2 = 2
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
-                 decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, num_embeddings,
-                 embedding_size, loss_type, weight_decay, learning_rate, beta, fix_cudnn=False):
+                 decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_size,
+                 num_embeddings, embedding_size, loss_type, weight_decay, learning_rate, beta1, beta2, fix_cudnn=False):
 
         super(VQ_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
@@ -42,12 +42,14 @@ class VQ_VAE(Model):
         self.decoder_filters = decoder_filters
         self.decoder_filter_sizes = decoder_filter_sizes
         self.decoder_strides = decoder_strides
+        self.latent_size = latent_size
         self.num_embeddings = num_embeddings
         self.embedding_size = embedding_size
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
-        self.beta = beta
+        self.beta1 = beta1
+        self.beta2 = beta2
 
         self.input_pl = None
         self.input_flat_t = None
@@ -73,7 +75,7 @@ class VQ_VAE(Model):
 
             batch_slice = np.index_exp[step_idx * batch_size:(step_idx + 1) * batch_size]
 
-            tmp_encoding = self.session.run(self.sample_t, feed_dict={
+            tmp_encoding = self.session.run(self.classes, feed_dict={
                 self.input_pl: inputs[batch_slice]
             })
 
@@ -83,26 +85,36 @@ class VQ_VAE(Model):
 
         return encodings
 
-    def predict(self, num_samples):
+    def decode(self, classes):
 
         outputs = self.session.run(self.output_t, feed_dict={
-            self.mu_t: np.zeros((num_samples, self.latent_space_size), dtype=np.float32),
-            self.sd_t: np.ones((num_samples, self.latent_space_size), dtype=np.float32)
-
+            self.classes: classes,
+            self.pred_embeds: np.zeros((len(classes), self.latent_size, self.embedding_size))
         })
 
         return outputs[:, :, :, 0]
 
+    def predict(self, num_samples):
+
+        classes = np.random.randint(0, self.num_embeddings, size=(num_samples, self.latent_size))
+
+        outputs = self.session.run(self.output_t, feed_dict={
+            self.classes: classes,
+            self.pred_embeds: np.zeros((num_samples, self.latent_size, self.embedding_size))
+        })
+
+        return outputs[:, :, :, 0], classes
+
     def train(self, samples):
 
-        _, loss, output_loss, left_loss, right_loss, reg_loss = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.right_loss_t, self.reg_loss_t],
+        _, loss, output_loss, left_loss, reg_loss = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t],
             feed_dict={
                 self.input_pl: samples
             }
         )
 
-        return loss, output_loss, left_loss, right_loss, reg_loss
+        return loss, output_loss, left_loss, reg_loss
 
     def build_all(self):
 
@@ -167,14 +179,14 @@ class VQ_VAE(Model):
             )
 
             self.pred_embeds = tf.layers.dense(
-                input_t, self.num_embeddings * self.embedding_size, activation=None,
+                input_t, self.latent_size * self.embedding_size, activation=None,
                 kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
             )
-            self.pred_embeds = tf.reshape(self.pred_embeds, (-1, self.num_embeddings, self.embedding_size))
+            self.pred_embeds = tf.reshape(self.pred_embeds, (-1, self.latent_size, self.embedding_size))
 
-            diff = self.embeds[tf.newaxis, :, :] - self.pred_embeds
-            norm = tf.norm(diff, axis=2)
-            self.classes = tf.argmin(norm, axis=2)
+            self.diff = self.embedding_difference(self.pred_embeds, self.embeds)
+            self.norm = tf.norm(self.diff, axis=3)
+            self.classes = tf.argmin(self.norm, axis=2)
 
             self.collected_embeds = tf.gather(self.embeds, self.classes)
 
@@ -182,7 +194,7 @@ class VQ_VAE(Model):
             self.collected_embeds = tf.stop_gradient(self.collected_embeds - self.pred_embeds) + self.pred_embeds
 
             self.flat_collected_embeds = tf.reshape(
-                self.collected_embeds, (-1, self.num_embeddings * self.embedding_size)
+                self.collected_embeds, (-1, self.latent_size * self.embedding_size)
             )
 
     def build_decoder(self, input_t, share_weights=False):
@@ -242,15 +254,20 @@ class VQ_VAE(Model):
             self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.left_loss_t = tf.reduce_mean(
-                tf.norm(tf.stop_gradient(self.pred_embeds) - self.embeds[tf.newaxis, :, :], axis=2)
+                tf.norm(self.embedding_difference(tf.stop_gradient(self.pred_embeds), self.embeds), axis=3)
             )
 
             self.right_loss_t = tf.reduce_mean(
-                tf.norm(self.pred_embeds - tf.stop_gradient(self.embeds[tf.newaxis, :, :]), axis=2)
+                tf.norm(self.embedding_difference(self.pred_embeds, tf.stop_gradient(self.embeds)), axis=3)
             )
 
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
-            self.loss_t = self.output_loss_t + self.left_loss_t + self.beta * self.right_loss_t + self.reg_loss_t
+            self.loss_t = self.output_loss_t + self.beta1 * self.left_loss_t + self.beta2 * self.right_loss_t + \
+                self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
+
+    def embedding_difference(self, predictions, actual):
+
+        return predictions[:, :, tf.newaxis, :] - actual[tf.newaxis, tf.newaxis, :, :]
