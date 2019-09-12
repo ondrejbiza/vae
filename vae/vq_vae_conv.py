@@ -106,16 +106,14 @@ class VQ_VAE(Model):
 
     def train(self, samples):
 
-        _, loss, output_loss, left_loss, reg_loss, n, c = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.norm, self.classes],
+        _, loss, output_loss, left_loss, reg_loss, e = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.embeds],
             feed_dict={
                 self.input_pl: samples
             }
         )
 
-        #print(n[0, 0])
-        print(c)
-        #print()
+        print(e)
 
         return loss, output_loss, left_loss, reg_loss
 
