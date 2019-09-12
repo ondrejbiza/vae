@@ -1,10 +1,15 @@
 import argparse
 import collections
 import os
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
+tf.get_logger().setLevel(logging.ERROR)
+
 from .. import vq_vae_conv
 from .. import utils
 

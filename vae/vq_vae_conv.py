@@ -4,7 +4,6 @@
 # https://arxiv.org/pdf/1711.00937.pdf
 # http://bayesiandeeplearning.org/2017/papers/54.pdf
 
-
 from enum import Enum
 import numpy as np
 import tensorflow as tf
@@ -107,12 +106,16 @@ class VQ_VAE(Model):
 
     def train(self, samples):
 
-        _, loss, output_loss, left_loss, reg_loss = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t],
+        _, loss, output_loss, left_loss, reg_loss, n, c = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.norm, self.classes],
             feed_dict={
                 self.input_pl: samples
             }
         )
+
+        #print(n[0, 0])
+        print(c)
+        #print()
 
         return loss, output_loss, left_loss, reg_loss
 
@@ -187,11 +190,15 @@ class VQ_VAE(Model):
             self.diff = self.embedding_difference(self.pred_embeds, self.embeds)
             self.norm = tf.norm(self.diff, axis=3)
             self.classes = tf.argmin(self.norm, axis=2)
+            self.flat_classes = tf.reshape(self.classes, (-1,))
 
-            self.collected_embeds = tf.gather(self.embeds, self.classes)
+            self.vector_of_collected_embeds = tf.gather(self.embeds, self.flat_classes)
+            self.collected_embeds = tf.reshape(
+                self.vector_of_collected_embeds, (tf.shape(self.classes)[0], self.latent_size, self.embedding_size)
+            )
 
             # fake gradients
-            self.collected_embeds = tf.stop_gradient(self.collected_embeds - self.pred_embeds) + self.pred_embeds
+            self.collected_embeds = tf.stop_gradient(- self.pred_embeds) + self.collected_embeds + self.pred_embeds
 
             self.flat_collected_embeds = tf.reshape(
                 self.collected_embeds, (-1, self.latent_size * self.embedding_size)

@@ -1,7 +1,12 @@
 import os
+import logging
 import unittest
 import numpy as np
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
+tf.get_logger().setLevel(logging.ERROR)
+
 from ..vq_vae_conv import VQ_VAE
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -38,6 +43,8 @@ class TestVQVAE(unittest.TestCase):
         )
         self.assertEqual(self.get_tensor_shape(model.norm), (None, self.LATENT_SIZE, self.NUM_EMBEDDINGS))
         self.assertEqual(self.get_tensor_shape(model.classes), (None, self.LATENT_SIZE))
+        self.assertEqual(self.get_tensor_shape(model.flat_classes), (None,))
+        self.assertEqual(self.get_tensor_shape(model.vector_of_collected_embeds), (None, self.EMBEDDING_SIZE))
         self.assertEqual(self.get_tensor_shape(model.collected_embeds), (None, self.LATENT_SIZE, self.EMBEDDING_SIZE))
         self.assertEqual(
             self.get_tensor_shape(model.flat_collected_embeds), (None, self.LATENT_SIZE * self.EMBEDDING_SIZE)
