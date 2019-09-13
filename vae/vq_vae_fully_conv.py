@@ -108,27 +108,12 @@ class VQ_VAE(Model):
 
     def train(self, samples):
 
-        _, loss, output_loss, left_loss, reg_loss, e, p = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.embeds, self.pred_embeds],
+        _, loss, output_loss, left_loss, reg_loss = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t],
             feed_dict={
                 self.input_pl: samples
             }
         )
-
-        """
-        p = np.reshape(p, (p.shape[0] * p.shape[1] * p.shape[2], p.shape[3]))
-        a = np.concatenate([e, p], axis=0)
-
-        l = np.concatenate([np.zeros(len(e)), np.ones(len(p))], axis=0)
-
-        from sklearn.decomposition import PCA
-        m = PCA(n_components=2)
-        x = m.fit_transform(a)
-
-        import matplotlib.pyplot as plt
-        plt.scatter(x[:, 0], x[:, 1], c=l)
-        plt.show()
-        """
 
         return loss, output_loss, left_loss, reg_loss
 
@@ -168,7 +153,6 @@ class VQ_VAE(Model):
     def build_encoder(self, input_t, share_weights=False):
 
         x = input_t
-        print("encoder input:", x)
 
         with tf.variable_scope("encoder", reuse=share_weights):
 
@@ -180,7 +164,6 @@ class VQ_VAE(Model):
                         kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
                         kernel_initializer=tf.truncated_normal_initializer(stddev=0.02)
                     )
-                    print("encoder x:", x)
 
         return x
 
@@ -199,13 +182,9 @@ class VQ_VAE(Model):
 
             self.collected_embeds = tf.gather(self.embeds, self.classes)
 
-            # fake gradients
-            self.collected_embeds_fake_grads = tf.stop_gradient(self.collected_embeds - input_t) + input_t
-
     def build_decoder(self, input_t, share_weights=False):
 
         x = input_t
-        print("decoder input:", x)
 
         with tf.variable_scope("decoder", reuse=share_weights):
 
@@ -217,7 +196,6 @@ class VQ_VAE(Model):
                         kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
                         kernel_initializer=tf.random_normal_initializer(stddev=0.02)
                     )
-                    print("decoder x:", x)
 
         logits_t = tf.nn.sigmoid(x)
         output_t = logits_t
@@ -282,8 +260,19 @@ class VQ_VAE(Model):
             else:
                 learning_rate = self.learning_rate
 
-            self.step_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(
-                self.loss_t, global_step=self.global_step
+            # taken from https://github.com/hiwonjoon/tf-vqvae
+            decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "model/decoder")
+            decoder_grads = list(zip(tf.gradients(self.loss_t, decoder_vars), decoder_vars))
+            # Encoder Grads
+            encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "model/encoder")
+            grad_z = tf.gradients(self.output_loss_t, self.collected_embeds)
+            encoder_grads = [(tf.gradients(self.pred_embeds, var, grad_z)[0] + self.beta2 * tf.gradients(self.right_loss_t, var)[0], var)
+                             for var in encoder_vars]
+            # Embedding Grads
+            embed_grads = list(zip(tf.gradients(self.left_loss_t, self.embeds), [self.embeds]))
+
+            self.step_op = tf.train.AdamOptimizer(learning_rate=learning_rate).apply_gradients(
+                decoder_grads + encoder_grads + embed_grads, global_step=self.global_step
             )
 
     def embedding_difference(self, predictions, actual):
