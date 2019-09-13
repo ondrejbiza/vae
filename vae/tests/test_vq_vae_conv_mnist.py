@@ -46,8 +46,12 @@ class TestVQVAE(unittest.TestCase):
         self.assertEqual(self.get_tensor_shape(model.flat_classes), (None,))
         self.assertEqual(self.get_tensor_shape(model.vector_of_collected_embeds), (None, self.EMBEDDING_SIZE))
         self.assertEqual(self.get_tensor_shape(model.collected_embeds), (None, self.LATENT_SIZE, self.EMBEDDING_SIZE))
+        self.assertEqual(self.get_tensor_shape(
+            model.collected_embeds_fake_grads), (None, self.LATENT_SIZE, self.EMBEDDING_SIZE)
+        )
         self.assertEqual(
-            self.get_tensor_shape(model.flat_collected_embeds), (None, self.LATENT_SIZE * self.EMBEDDING_SIZE)
+            self.get_tensor_shape(model.flat_collected_embeds_fake_grads),
+            (None, self.LATENT_SIZE * self.EMBEDDING_SIZE)
         )
 
     def test_build_and_start_session(self):

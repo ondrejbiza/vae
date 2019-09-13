@@ -106,14 +106,25 @@ class VQ_VAE(Model):
 
     def train(self, samples):
 
-        _, loss, output_loss, left_loss, reg_loss, e = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.embeds],
+        _, loss, output_loss, left_loss, reg_loss, e, p = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.embeds, self.pred_embeds],
             feed_dict={
                 self.input_pl: samples
             }
         )
 
-        print(e)
+        p = p[:, 0, :]
+        a = np.concatenate([e, p], axis=0)
+
+        l = np.concatenate([np.zeros(len(e)), np.ones(len(p))], axis=0)
+
+        from sklearn.decomposition import PCA
+        m = PCA(n_components=2)
+        x = m.fit_transform(a)
+
+        import matplotlib.pyplot as plt
+        plt.scatter(x[:, 0], x[:, 1], c=l)
+        plt.show()
 
         return loss, output_loss, left_loss, reg_loss
 
@@ -143,7 +154,7 @@ class VQ_VAE(Model):
             self.build_middle(x)
 
             # decoder
-            self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.flat_collected_embeds)
+            self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.flat_collected_embeds_fake_grads)
 
     def build_encoder(self, input_t, share_weights=False):
 
@@ -196,10 +207,11 @@ class VQ_VAE(Model):
             )
 
             # fake gradients
-            self.collected_embeds = tf.stop_gradient(- self.pred_embeds) + self.collected_embeds + self.pred_embeds
+            self.collected_embeds_fake_grads = tf.stop_gradient(self.collected_embeds - self.pred_embeds) + \
+                self.pred_embeds
 
-            self.flat_collected_embeds = tf.reshape(
-                self.collected_embeds, (-1, self.latent_size * self.embedding_size)
+            self.flat_collected_embeds_fake_grads = tf.reshape(
+                self.collected_embeds_fake_grads, (-1, self.latent_size * self.embedding_size)
             )
 
     def build_decoder(self, input_t, share_weights=False):
@@ -259,11 +271,11 @@ class VQ_VAE(Model):
             self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.left_loss_t = tf.reduce_mean(
-                tf.norm(self.embedding_difference(tf.stop_gradient(self.pred_embeds), self.embeds), axis=3)
+                tf.norm(tf.stop_gradient(self.pred_embeds) - self.collected_embeds, axis=2)
             )
 
             self.right_loss_t = tf.reduce_mean(
-                tf.norm(self.embedding_difference(self.pred_embeds, tf.stop_gradient(self.embeds)), axis=3)
+                tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=2)
             )
 
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
