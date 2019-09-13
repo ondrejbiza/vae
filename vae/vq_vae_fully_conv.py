@@ -21,9 +21,9 @@ class VQ_VAE(Model):
         SIGMOID_CROSS_ENTROPY = 1
         L2 = 2
 
-    def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
-                 decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_size,
-                 num_embeddings, embedding_size, loss_type, weight_decay, learning_rate, beta1, beta2, fix_cudnn=False):
+    def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides,
+                 decoder_filters, decoder_filter_sizes, decoder_strides, num_embeddings, loss_type,
+                 weight_decay, learning_rate, beta1, beta2, fix_cudnn=False):
 
         super(VQ_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
@@ -36,14 +36,10 @@ class VQ_VAE(Model):
         self.encoder_filters = encoder_filters
         self.encoder_filter_sizes = encoder_filter_sizes
         self.encoder_strides = encoder_strides
-        self.encoder_neurons = encoder_neurons
-        self.decoder_neurons = decoder_neurons
         self.decoder_filters = decoder_filters
         self.decoder_filter_sizes = decoder_filter_sizes
         self.decoder_strides = decoder_strides
-        self.latent_size = latent_size
         self.num_embeddings = num_embeddings
-        self.embedding_size = embedding_size
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
@@ -88,18 +84,18 @@ class VQ_VAE(Model):
 
         outputs = self.session.run(self.output_t, feed_dict={
             self.classes: classes,
-            self.pred_embeds: np.zeros((len(classes), self.latent_size, self.embedding_size))
+            self.pred_embeds: np.zeros([item.value for item in self.pred_embeds.shape])
         })
 
         return outputs[:, :, :, 0]
 
     def predict(self, num_samples):
 
-        classes = np.random.randint(0, self.num_embeddings, size=(num_samples, self.latent_size))
+        classes = np.random.randint(0, self.num_embeddings, size=(num_samples, self.pred_embeds.shape[1].value, self.pred_embeds.shape[2].value))
 
         outputs = self.session.run(self.output_t, feed_dict={
             self.classes: classes,
-            self.pred_embeds: np.zeros((num_samples, self.latent_size, self.embedding_size))
+            self.pred_embeds: np.zeros([item.value for item in self.pred_embeds.shape])
         })
 
         return outputs[:, :, :, 0], classes
@@ -113,7 +109,8 @@ class VQ_VAE(Model):
             }
         )
 
-        p = p[:, 0, :]
+        """
+        p = np.reshape(p, (p.shape[0] * p.shape[1] * p.shape[2], p.shape[3]))
         a = np.concatenate([e, p], axis=0)
 
         l = np.concatenate([np.zeros(len(e)), np.ones(len(p))], axis=0)
@@ -125,6 +122,7 @@ class VQ_VAE(Model):
         import matplotlib.pyplot as plt
         plt.scatter(x[:, 0], x[:, 1], c=l)
         plt.show()
+        """
 
         return loss, output_loss, left_loss, reg_loss
 
@@ -141,24 +139,27 @@ class VQ_VAE(Model):
     def build_placeholders(self):
 
         self.input_pl = tf.placeholder(tf.float32, shape=(None, *self.input_shape), name="input_pl")
-        self.input_flat_t = tf.reshape(self.input_pl, shape=(tf.shape(self.input_pl)[0], self.flat_input_shape))
+        self.input_resized_t = tf.image.resize_images(
+            tf.reshape(self.input_pl, [-1, 28, 28, 1]), (24, 24), method=tf.image.ResizeMethod.BILINEAR
+        )
 
     def build_network(self):
 
         with tf.variable_scope(self.MODEL_NAMESPACE):
 
             # encoder
-            x = self.build_encoder(self.input_pl)
+            self.pred_embeds = self.build_encoder(self.input_resized_t)
 
             # middle
-            self.build_middle(x)
+            self.build_middle(self.pred_embeds)
 
             # decoder
-            self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.flat_collected_embeds_fake_grads)
+            self.logits_t, self.output_t = self.build_decoder(self.collected_embeds)
 
     def build_encoder(self, input_t, share_weights=False):
 
-        x = tf.expand_dims(input_t, axis=-1)
+        x = input_t
+        print("encoder input:", x)
 
         with tf.variable_scope("encoder", reuse=share_weights):
 
@@ -167,17 +168,10 @@ class VQ_VAE(Model):
                     x = tf.layers.conv2d(
                         x, self.encoder_filters[idx], self.encoder_filter_sizes[idx], self.encoder_strides[idx],
                         padding="SAME", activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.truncated_normal_initializer(stddev=0.02)
                     )
-
-            x = tf.layers.flatten(x)
-
-            for idx, neurons in enumerate(self.encoder_neurons):
-                with tf.variable_scope("fc{:d}".format(idx + 1)):
-                    x = tf.layers.dense(
-                        x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                    )
+                    print("encoder x:", x)
 
         return x
 
@@ -186,59 +180,37 @@ class VQ_VAE(Model):
         with tf.variable_scope("middle", reuse=share_weights):
 
             self.embeds = tf.get_variable(
-                "embeddings", [self.num_embeddings, self.embedding_size],
+                "embeddings", [self.num_embeddings, self.pred_embeds.shape[3].value],
                 initializer=tf.truncated_normal_initializer(stddev=0.02)
             )
 
-            self.pred_embeds = tf.layers.dense(
-                input_t, self.latent_size * self.embedding_size, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-            )
-            self.pred_embeds = tf.reshape(self.pred_embeds, (-1, self.latent_size, self.embedding_size))
+            self.diff = input_t[:, :, :, tf.newaxis, :] - self.embeds[tf.newaxis, tf.newaxis, tf.newaxis, :, :]
+            self.norm = tf.norm(self.diff, axis=4)
+            self.classes = tf.argmin(self.norm, axis=3)
 
-            self.diff = self.embedding_difference(self.pred_embeds, self.embeds)
-            self.norm = tf.norm(self.diff, axis=3)
-            self.classes = tf.argmin(self.norm, axis=2)
-            self.flat_classes = tf.reshape(self.classes, (-1,))
-
-            self.vector_of_collected_embeds = tf.gather(self.embeds, self.flat_classes)
-            self.collected_embeds = tf.reshape(
-                self.vector_of_collected_embeds, (tf.shape(self.classes)[0], self.latent_size, self.embedding_size)
-            )
+            self.collected_embeds = tf.gather(self.embeds, self.classes)
 
             # fake gradients
-            self.collected_embeds_fake_grads = tf.stop_gradient(self.collected_embeds - self.pred_embeds) + \
-                self.pred_embeds
-
-            self.flat_collected_embeds_fake_grads = tf.reshape(
-                self.collected_embeds_fake_grads, (-1, self.latent_size * self.embedding_size)
-            )
+            self.collected_embeds_fake_grads = tf.stop_gradient(self.collected_embeds - input_t) + input_t
 
     def build_decoder(self, input_t, share_weights=False):
 
+        x = input_t
+        print("decoder input:", x)
+
         with tf.variable_scope("decoder", reuse=share_weights):
-
-            x = input_t
-
-            for idx, neurons in enumerate(self.decoder_neurons):
-                with tf.variable_scope("fc{:d}".format(idx + 1)):
-                    x = tf.layers.dense(
-                        x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-                    )
-
-            x = x[:, tf.newaxis, tf.newaxis, :]
 
             for idx in range(len(self.decoder_filters)):
                 with tf.variable_scope("conv{:d}".format(idx + 1)):
                     x = tf.layers.conv2d_transpose(
                         x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
-                        padding="VALID", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        padding="SAME", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=tf.random_normal_initializer(stddev=0.02)
                     )
+                    print("decoder x:", x)
 
         logits_t = tf.nn.sigmoid(x)
-        flat_logits_t = tf.layers.flatten(logits_t)
         output_t = logits_t
 
         #if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
@@ -246,7 +218,7 @@ class VQ_VAE(Model):
         #else:
         #   output_t = logits_t
 
-        return logits_t, flat_logits_t, output_t
+        return logits_t, output_t
 
     def build_training(self):
 
@@ -271,7 +243,7 @@ class VQ_VAE(Model):
                 )
                 """
                 self.full_output_loss_t = tf.reduce_mean(
-                    tf.square((self.input_flat_t - self.flat_logits_t)), axis=1
+                    tf.square((self.input_resized_t - self.logits_t)), axis=[1, 2, 3]
                 )
 
             self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
@@ -284,7 +256,12 @@ class VQ_VAE(Model):
                 tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=2)
             )
 
-            self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+            reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+            if len(reg_losses) > 0:
+                self.reg_loss_t = tf.add_n(reg_losses)
+            else:
+                self.reg_loss_t = tf.constant(0.0, dtype=tf.float32)
 
             self.loss_t = self.output_loss_t + self.beta1 * self.left_loss_t + self.beta2 * self.right_loss_t + \
                 self.reg_loss_t

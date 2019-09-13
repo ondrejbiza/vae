@@ -10,7 +10,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 tf.get_logger().setLevel(logging.ERROR)
 
-from .. import vq_vae_conv
+from .. import vq_vae_fully_conv
 from .. import utils
 
 
@@ -30,16 +30,16 @@ def main(args):
 
     # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
     # in all fully-connected and convolutional layers
-    model = vq_vae_conv.VQ_VAE(
-        [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
-        args.latent_size, args.num_embeddings, args.embedding_size, vq_vae_conv.VQ_VAE.LossType.L2,
-        args.weight_decay, args.learning_rate, args.beta1, args.beta2
+    model = vq_vae_fully_conv.VQ_VAE(
+        [28, 28], [16, 32, 64], [4, 4, 4], [2, 2, 2], [32, 16, 1], [4, 4, 4], [2, 2, 2],
+        args.num_embeddings, vq_vae_fully_conv.VQ_VAE.LossType.L2, args.weight_decay, args.learning_rate, args.beta1,
+        args.beta2
     )
 
     model.build_all()
     model.start_session()
 
-    batch_size = 100
+    batch_size = args.batch_size
     epoch_size = len(train_data) // batch_size
 
     losses = collections.defaultdict(list)
@@ -111,14 +111,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--latent-size", type=int, default=16)
-    parser.add_argument("--num-embeddings", type=int, default=10)
-    parser.add_argument("--embedding-size", type=int, default=64)
-    parser.add_argument("--disable-kl-loss", default=False, action="store_true")
+    parser.add_argument("--num-embeddings", type=int, default=5)
     parser.add_argument("--num-training-steps", type=int, default=60000)
-    parser.add_argument("--learning-rate", type=float, default=0.001)
-    parser.add_argument("--weight-decay", type=float, default=0.0005)
-    parser.add_argument("--beta1", type=float, default=0.25)
+    parser.add_argument("--learning-rate", type=float, default=0.0002)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--beta1", type=float, default=1.0)
     parser.add_argument("--beta2", type=float, default=0.25)
 
     parser.add_argument("--gpus")
