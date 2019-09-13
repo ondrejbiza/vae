@@ -29,7 +29,8 @@ def main(args):
     model = vq_vae_fully_conv.VQ_VAE(
         [28, 28], [16, 32, 64], [4, 4, 4], [2, 2, 2], [32, 16, 1], [4, 4, 4], [2, 2, 2],
         args.num_embeddings, vq_vae_fully_conv.VQ_VAE.LossType.L2, args.weight_decay, args.lr, args.beta1,
-        args.beta2, lr_decay_val=args.lr_decay_val, lr_decay_steps=args.lr_decay_steps
+        args.beta2, lr_decay_val=args.lr_decay_val, lr_decay_steps=args.lr_decay_steps,
+        fix_cudnn=args.fix_cudnn
     )
 
     model.build_all()
@@ -116,6 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--beta2", type=float, default=0.25)
 
     parser.add_argument("--gpus")
+    parser.add_argument("--fix-cudnn", default=False, action="store_true")
 
     parsed = parser.parse_args()
     main(parsed)
