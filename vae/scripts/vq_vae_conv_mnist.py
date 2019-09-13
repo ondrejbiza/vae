@@ -23,8 +23,6 @@ def main(args):
     train_data = train_data / 255.0
     eval_data = eval_data / 255.0
 
-    print(np.min(train_data), np.mean(train_data), np.max(train_data), np.std(train_data))
-
     train_data, train_labels = shuffle(train_data, train_labels)
     eval_data, eval_labels = shuffle(eval_data, eval_labels)
 
@@ -33,7 +31,7 @@ def main(args):
     model = vq_vae_conv.VQ_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
         args.latent_size, args.num_embeddings, args.embedding_size, vq_vae_conv.VQ_VAE.LossType.L2,
-        args.weight_decay, args.learning_rate, args.beta1, args.beta2
+        args.weight_decay, args.learning_rate, args.beta1, args.beta2, fix_cudnn=args.fix_cudnn
     )
 
     model.build_all()
@@ -46,6 +44,8 @@ def main(args):
     epoch_losses = collections.defaultdict(list)
 
     for train_step in range(args.num_training_steps):
+
+        print(train_step)
 
         epoch_step = train_step % epoch_size
 
@@ -64,8 +64,6 @@ def main(args):
         samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
 
         loss, output_loss, commitment_loss, reg_loss = model.train(samples)
-        print("recon", output_loss)
-        print("commit", commitment_loss)
 
         epoch_losses["total"].append(loss)
         epoch_losses["output"].append(output_loss)
@@ -111,8 +109,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--latent-size", type=int, default=16)
-    parser.add_argument("--num-embeddings", type=int, default=10)
+    parser.add_argument("--latent-size", type=int, default=9)
+    parser.add_argument("--num-embeddings", type=int, default=5)
     parser.add_argument("--embedding-size", type=int, default=64)
     parser.add_argument("--disable-kl-loss", default=False, action="store_true")
     parser.add_argument("--num-training-steps", type=int, default=60000)
@@ -122,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument("--beta2", type=float, default=0.25)
 
     parser.add_argument("--gpus")
+    parser.add_argument("--fix-cudnn", default=False, action="store_true")
 
     parsed = parser.parse_args()
     main(parsed)

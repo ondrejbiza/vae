@@ -106,25 +106,12 @@ class VQ_VAE(Model):
 
     def train(self, samples):
 
-        _, loss, output_loss, left_loss, reg_loss, e, p = self.session.run(
-            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t, self.embeds, self.pred_embeds],
+        _, loss, output_loss, left_loss, reg_loss = self.session.run(
+            [self.step_op, self.loss_t, self.output_loss_t, self.left_loss_t, self.reg_loss_t],
             feed_dict={
                 self.input_pl: samples
             }
         )
-
-        p = p[:, 0, :]
-        a = np.concatenate([e, p], axis=0)
-
-        l = np.concatenate([np.zeros(len(e)), np.ones(len(p))], axis=0)
-
-        from sklearn.decomposition import PCA
-        m = PCA(n_components=2)
-        x = m.fit_transform(a)
-
-        import matplotlib.pyplot as plt
-        plt.scatter(x[:, 0], x[:, 1], c=l)
-        plt.show()
 
         return loss, output_loss, left_loss, reg_loss
 
@@ -154,7 +141,7 @@ class VQ_VAE(Model):
             self.build_middle(x)
 
             # decoder
-            self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.flat_collected_embeds_fake_grads)
+            self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.flat_collected_embeds)
 
     def build_encoder(self, input_t, share_weights=False):
 
@@ -205,13 +192,8 @@ class VQ_VAE(Model):
             self.collected_embeds = tf.reshape(
                 self.vector_of_collected_embeds, (tf.shape(self.classes)[0], self.latent_size, self.embedding_size)
             )
-
-            # fake gradients
-            self.collected_embeds_fake_grads = tf.stop_gradient(self.collected_embeds - self.pred_embeds) + \
-                self.pred_embeds
-
-            self.flat_collected_embeds_fake_grads = tf.reshape(
-                self.collected_embeds_fake_grads, (-1, self.latent_size * self.embedding_size)
+            self.flat_collected_embeds = tf.reshape(
+                self.collected_embeds, (-1, self.latent_size * self.embedding_size)
             )
 
     def build_decoder(self, input_t, share_weights=False):
@@ -277,11 +259,11 @@ class VQ_VAE(Model):
             self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.left_loss_t = tf.reduce_mean(
-                tf.norm(tf.stop_gradient(self.pred_embeds) - self.collected_embeds, axis=2)
+                tf.norm(tf.stop_gradient(self.pred_embeds) - self.collected_embeds, axis=2) ** 2
             )
 
             self.right_loss_t = tf.reduce_mean(
-                tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=2)
+                tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=2) ** 2
             )
 
             self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
@@ -289,7 +271,21 @@ class VQ_VAE(Model):
             self.loss_t = self.output_loss_t + self.beta1 * self.left_loss_t + self.beta2 * self.right_loss_t + \
                 self.reg_loss_t
 
-            self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
+            # taken from https://github.com/hiwonjoon/tf-vqvae
+            decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "model/decoder")
+            decoder_grads = list(zip(tf.gradients(self.loss_t, decoder_vars), decoder_vars))
+            # Encoder Grads
+            encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "model/encoder")
+            grad_z = tf.gradients(self.output_loss_t, self.collected_embeds)
+            encoder_grads = [(tf.gradients(self.pred_embeds, var, grad_z)[0] + self.beta2 *
+                              tf.gradients(self.right_loss_t, var)[0], var)
+                             for var in encoder_vars]
+            # Embedding Grads
+            embed_grads = list(zip(tf.gradients(self.left_loss_t, self.embeds), [self.embeds]))
+
+            self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).apply_gradients(
+                decoder_grads + encoder_grads + embed_grads
+            )
 
     def embedding_difference(self, predictions, actual):
 
