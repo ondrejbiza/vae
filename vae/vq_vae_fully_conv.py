@@ -23,7 +23,7 @@ class VQ_VAE(Model):
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides,
                  decoder_filters, decoder_filter_sizes, decoder_strides, num_embeddings, loss_type,
-                 weight_decay, learning_rate, beta1, beta2, fix_cudnn=False):
+                 weight_decay, learning_rate, beta1, beta2, lr_decay_val=None, lr_decay_steps=None, fix_cudnn=False):
 
         super(VQ_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
@@ -45,6 +45,8 @@ class VQ_VAE(Model):
         self.learning_rate = learning_rate
         self.beta1 = beta1
         self.beta2 = beta2
+        self.lr_decay_val = lr_decay_val
+        self.lr_decay_steps = lr_decay_steps
 
         self.input_pl = None
         self.input_flat_t = None
@@ -249,11 +251,11 @@ class VQ_VAE(Model):
             self.output_loss_t = tf.reduce_mean(self.full_output_loss_t, axis=0)
 
             self.left_loss_t = tf.reduce_mean(
-                tf.norm(tf.stop_gradient(self.pred_embeds) - self.collected_embeds, axis=2)
+                tf.norm(tf.stop_gradient(self.pred_embeds) - self.collected_embeds, axis=3) ** 2
             )
 
             self.right_loss_t = tf.reduce_mean(
-                tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=2)
+                tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=3) ** 2
             )
 
             reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -266,7 +268,16 @@ class VQ_VAE(Model):
             self.loss_t = self.output_loss_t + self.beta1 * self.left_loss_t + self.beta2 * self.right_loss_t + \
                 self.reg_loss_t
 
-            self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
+            self.global_step = tf.train.get_or_create_global_step()
+
+            if self.lr_decay_val is not None and self.lr_decay_steps is not None:
+                learning_rate = tf.train.exponential_decay(self.learning_rate, self.global_step, self.lr_decay_steps, self.lr_decay_val)
+            else:
+                learning_rate = self.learning_rate
+
+            self.step_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(
+                self.loss_t, global_step=self.global_step
+            )
 
     def embedding_difference(self, predictions, actual):
 

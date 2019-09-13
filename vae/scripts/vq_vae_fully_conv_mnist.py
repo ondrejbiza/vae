@@ -23,17 +23,13 @@ def main(args):
     train_data = train_data / 255.0
     eval_data = eval_data / 255.0
 
-    print(np.min(train_data), np.mean(train_data), np.max(train_data), np.std(train_data))
-
     train_data, train_labels = shuffle(train_data, train_labels)
     eval_data, eval_labels = shuffle(eval_data, eval_labels)
 
-    # the same settings as in https://arxiv.org/abs/1803.10122, only half the filters
-    # in all fully-connected and convolutional layers
     model = vq_vae_fully_conv.VQ_VAE(
         [28, 28], [16, 32, 64], [4, 4, 4], [2, 2, 2], [32, 16, 1], [4, 4, 4], [2, 2, 2],
-        args.num_embeddings, vq_vae_fully_conv.VQ_VAE.LossType.L2, args.weight_decay, args.learning_rate, args.beta1,
-        args.beta2
+        args.num_embeddings, vq_vae_fully_conv.VQ_VAE.LossType.L2, args.weight_decay, args.lr, args.beta1,
+        args.beta2, lr_decay_val=args.lr_decay_val, lr_decay_steps=args.lr_decay_steps
     )
 
     model.build_all()
@@ -64,8 +60,6 @@ def main(args):
         samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
 
         loss, output_loss, commitment_loss, reg_loss = model.train(samples)
-        print("recon", output_loss)
-        print("commit", commitment_loss)
 
         epoch_losses["total"].append(loss)
         epoch_losses["output"].append(output_loss)
@@ -113,7 +107,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--num-embeddings", type=int, default=5)
     parser.add_argument("--num-training-steps", type=int, default=60000)
-    parser.add_argument("--learning-rate", type=float, default=0.0002)
+    parser.add_argument("--lr", type=float, default=0.0002)
+    parser.add_argument("--lr-decay-val", type=float, default=1.0)
+    parser.add_argument("--lr-decay-steps", type=int, default=20000)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--beta1", type=float, default=1.0)
