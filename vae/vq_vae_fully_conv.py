@@ -86,7 +86,9 @@ class VQ_VAE(Model):
 
         outputs = self.session.run(self.output_t, feed_dict={
             self.classes: classes,
-            self.pred_embeds: np.zeros([item.value for item in self.pred_embeds.shape])
+            self.pred_embeds: np.zeros(
+                (len(classes), self.latent_height, self.latent_width, self.latent_depth), dtype=np.float32
+            )
         })
 
         return outputs[:, :, :, 0]
@@ -97,7 +99,9 @@ class VQ_VAE(Model):
 
         outputs = self.session.run(self.output_t, feed_dict={
             self.classes: classes,
-            self.pred_embeds: np.zeros([item.value for item in self.pred_embeds.shape])
+            self.pred_embeds: np.zeros(
+                (len(classes), self.latent_height, self.latent_width, self.latent_depth), dtype=np.float32
+            )
         })
 
         return outputs[:, :, :, 0], classes
@@ -151,6 +155,9 @@ class VQ_VAE(Model):
 
             # encoder
             self.pred_embeds = self.build_encoder(self.input_resized_t)
+            self.latent_height = self.pred_embeds.shape[1].value
+            self.latent_width = self.pred_embeds.shape[2].value
+            self.latent_depth = self.pred_embeds.shape[3].value
 
             # middle
             self.build_middle(self.pred_embeds)
