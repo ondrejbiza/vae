@@ -31,26 +31,25 @@ def main(args):
     model = vq_vae_conv.VQ_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
         args.latent_size, args.num_embeddings, args.embedding_size, vq_vae_conv.VQ_VAE.LossType.L2,
-        args.weight_decay, args.learning_rate, args.beta1, args.beta2, fix_cudnn=args.fix_cudnn
+        args.weight_decay, args.lr, args.beta1, args.beta2, lr_decay_val=args.lr_decay_val,
+        lr_decay_steps=args.lr_decay_steps, fix_cudnn=args.fix_cudnn
     )
 
     model.build_all()
     model.start_session()
 
-    batch_size = 100
+    batch_size = args.batch_size
     epoch_size = len(train_data) // batch_size
 
     losses = collections.defaultdict(list)
     epoch_losses = collections.defaultdict(list)
 
+    if args.show_embeddings:
+        model.show_latent_space(train_data[0: batch_size])
+
     for train_step in range(args.num_training_steps):
 
-        print(train_step)
-
         epoch_step = train_step % epoch_size
-
-        if train_step > 0 and train_step % 1000 == 0:
-            print("step {:d}".format(train_step))
 
         if epoch_step == 0 and train_step > 0:
 
@@ -62,6 +61,12 @@ def main(args):
             epoch_losses = collections.defaultdict(list)
 
         samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
+
+        if train_step > 0 and train_step % 1000 == 0:
+            print("step {:d}".format(train_step))
+
+            if args.show_embeddings:
+                model.show_latent_space(samples)
 
         loss, output_loss, commitment_loss, reg_loss = model.train(samples)
 
@@ -112,12 +117,15 @@ if __name__ == "__main__":
     parser.add_argument("--latent-size", type=int, default=9)
     parser.add_argument("--num-embeddings", type=int, default=5)
     parser.add_argument("--embedding-size", type=int, default=64)
-    parser.add_argument("--disable-kl-loss", default=False, action="store_true")
     parser.add_argument("--num-training-steps", type=int, default=60000)
-    parser.add_argument("--learning-rate", type=float, default=0.001)
-    parser.add_argument("--weight-decay", type=float, default=0.0005)
-    parser.add_argument("--beta1", type=float, default=0.25)
-    parser.add_argument("--beta2", type=float, default=0.25)
+    parser.add_argument("--lr", type=float, default=0.0002)
+    parser.add_argument("--lr-decay-val", type=float, default=1.0)
+    parser.add_argument("--lr-decay-steps", type=int, default=20000)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--beta1", type=float, default=1.0)
+    parser.add_argument("--beta2", type=float, default=0.1)
+    parser.add_argument("--show-embeddings", default=False, action="store_true")
 
     parser.add_argument("--gpus")
     parser.add_argument("--fix-cudnn", default=False, action="store_true")

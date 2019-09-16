@@ -23,7 +23,8 @@ class VQ_VAE(Model):
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_size,
-                 num_embeddings, embedding_size, loss_type, weight_decay, learning_rate, beta1, beta2, fix_cudnn=False):
+                 num_embeddings, embedding_size, loss_type, weight_decay, learning_rate, beta1, beta2,
+                 lr_decay_val=None, lr_decay_steps=None, fix_cudnn=False):
 
         super(VQ_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
@@ -47,8 +48,12 @@ class VQ_VAE(Model):
         self.loss_type = loss_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
+        self.lr_decay_val = lr_decay_val
+        self.lr_decay_steps = lr_decay_steps
         self.beta1 = beta1
         self.beta2 = beta2
+
+        self.initializer = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode="FAN_IN", uniform=False)
 
         self.input_pl = None
         self.input_flat_t = None
@@ -115,6 +120,23 @@ class VQ_VAE(Model):
 
         return loss, output_loss, left_loss, reg_loss
 
+    def show_latent_space(self, samples):
+
+        p, e = self.session.run([self.pred_embeds, self.embeds], feed_dict={
+                self.input_pl: samples
+            }
+        )
+
+        p = np.reshape(p, (p.shape[0] * p.shape[1], p.shape[2]))
+        a = np.concatenate([e, p], axis=0)
+        l = np.concatenate([np.zeros(len(e)), np.ones(len(p))], axis=0)
+        from sklearn.decomposition import PCA
+        m = PCA(n_components=2)
+        x = m.fit_transform(a)
+        import matplotlib.pyplot as plt
+        plt.scatter(x[:, 0], x[:, 1], c=l)
+        plt.show()
+
     def build_all(self):
 
         self.build_placeholders()
@@ -135,10 +157,10 @@ class VQ_VAE(Model):
         with tf.variable_scope(self.MODEL_NAMESPACE):
 
             # encoder
-            x = self.build_encoder(self.input_pl)
+            self.build_encoder(self.input_pl)
 
             # middle
-            self.build_middle(x)
+            self.build_middle()
 
             # decoder
             self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.flat_collected_embeds)
@@ -154,7 +176,8 @@ class VQ_VAE(Model):
                     x = tf.layers.conv2d(
                         x, self.encoder_filters[idx], self.encoder_filter_sizes[idx], self.encoder_strides[idx],
                         padding="SAME", activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=self.initializer
                     )
 
             x = tf.layers.flatten(x)
@@ -163,12 +186,18 @@ class VQ_VAE(Model):
                 with tf.variable_scope("fc{:d}".format(idx + 1)):
                     x = tf.layers.dense(
                         x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=self.initializer
                     )
 
-        return x
+            with tf.variable_scope("final_fc"):
+                self.pred_embeds = tf.layers.dense(
+                    x, self.latent_size * self.embedding_size, activation=tf.nn.relu,
+                    kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                    kernel_initializer=self.initializer
+                )
 
-    def build_middle(self, input_t, share_weights=False):
+    def build_middle(self, share_weights=False):
 
         with tf.variable_scope("middle", reuse=share_weights):
 
@@ -177,21 +206,13 @@ class VQ_VAE(Model):
                 initializer=tf.truncated_normal_initializer(stddev=0.02)
             )
 
-            self.pred_embeds = tf.layers.dense(
-                input_t, self.latent_size * self.embedding_size, activation=None,
-                kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
-            )
             self.pred_embeds = tf.reshape(self.pred_embeds, (-1, self.latent_size, self.embedding_size))
 
             self.diff = self.embedding_difference(self.pred_embeds, self.embeds)
             self.norm = tf.norm(self.diff, axis=3)
             self.classes = tf.argmin(self.norm, axis=2)
-            self.flat_classes = tf.reshape(self.classes, (-1,))
 
-            self.vector_of_collected_embeds = tf.gather(self.embeds, self.flat_classes)
-            self.collected_embeds = tf.reshape(
-                self.vector_of_collected_embeds, (tf.shape(self.classes)[0], self.latent_size, self.embedding_size)
-            )
+            self.collected_embeds = tf.gather(self.embeds, self.classes)
             self.flat_collected_embeds = tf.reshape(
                 self.collected_embeds, (-1, self.latent_size * self.embedding_size)
             )
@@ -206,7 +227,8 @@ class VQ_VAE(Model):
                 with tf.variable_scope("fc{:d}".format(idx + 1)):
                     x = tf.layers.dense(
                         x, neurons, activation=tf.nn.relu,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=self.initializer
                     )
 
             x = x[:, tf.newaxis, tf.newaxis, :]
@@ -216,7 +238,8 @@ class VQ_VAE(Model):
                     x = tf.layers.conv2d_transpose(
                         x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
                         padding="VALID", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
-                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay)
+                        kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
+                        kernel_initializer=self.initializer
                     )
 
         logits_t = tf.nn.sigmoid(x)
@@ -266,10 +289,24 @@ class VQ_VAE(Model):
                 tf.norm(self.pred_embeds - tf.stop_gradient(self.collected_embeds), axis=2) ** 2
             )
 
-            self.reg_loss_t = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+            reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+            if len(reg_losses) > 0:
+                self.reg_loss_t = tf.add_n(reg_losses)
+            else:
+                self.reg_loss_t = tf.constant(0.0, dtype=tf.float32)
 
             self.loss_t = self.output_loss_t + self.beta1 * self.left_loss_t + self.beta2 * self.right_loss_t + \
                 self.reg_loss_t
+
+            self.global_step = tf.train.get_or_create_global_step()
+
+            if self.lr_decay_val is not None and self.lr_decay_steps is not None:
+                learning_rate = tf.train.exponential_decay(
+                    self.learning_rate, self.global_step, self.lr_decay_steps, self.lr_decay_val
+                )
+            else:
+                learning_rate = self.learning_rate
 
             # taken from https://github.com/hiwonjoon/tf-vqvae
             decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "model/decoder")
@@ -283,7 +320,7 @@ class VQ_VAE(Model):
             # Embedding Grads
             embed_grads = list(zip(tf.gradients(self.left_loss_t, self.embeds), [self.embeds]))
 
-            self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).apply_gradients(
+            self.step_op = tf.train.AdamOptimizer(learning_rate=learning_rate).apply_gradients(
                 decoder_grads + encoder_grads + embed_grads
             )
 

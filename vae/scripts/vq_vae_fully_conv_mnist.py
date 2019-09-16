@@ -30,7 +30,7 @@ def main(args):
         [28, 28], [16, 32, 64], [4, 4, 4], [2, 2, 2], [32, 16, 1], [4, 4, 4], [2, 2, 2],
         args.num_embeddings, vq_vae_fully_conv.VQ_VAE.LossType.L2, args.weight_decay, args.lr, args.beta1,
         args.beta2, lr_decay_val=args.lr_decay_val, lr_decay_steps=args.lr_decay_steps,
-        fix_cudnn=args.fix_cudnn
+        fix_cudnn=args.fix_cudnn, mrsa_init=args.mrsa_init
     )
 
     model.build_all()
@@ -42,12 +42,12 @@ def main(args):
     losses = collections.defaultdict(list)
     epoch_losses = collections.defaultdict(list)
 
+    if args.show_embeddings:
+        model.show_latent_space(train_data[0: batch_size])
+
     for train_step in range(args.num_training_steps):
 
         epoch_step = train_step % epoch_size
-
-        if train_step > 0 and train_step % 1000 == 0:
-            print("step {:d}".format(train_step))
 
         if epoch_step == 0 and train_step > 0:
 
@@ -59,6 +59,12 @@ def main(args):
             epoch_losses = collections.defaultdict(list)
 
         samples = train_data[epoch_step * batch_size : (epoch_step + 1) * batch_size]
+
+        if train_step > 0 and train_step % 1000 == 0:
+            print("step {:d}".format(train_step))
+
+            if args.show_embeddings:
+                model.show_latent_space(samples)
 
         loss, output_loss, commitment_loss, reg_loss = model.train(samples)
 
@@ -115,6 +121,8 @@ if __name__ == "__main__":
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--beta1", type=float, default=1.0)
     parser.add_argument("--beta2", type=float, default=0.25)
+    parser.add_argument("--mrsa-init", default=False, action="store_true")
+    parser.add_argument("--show-embeddings", default=False, action="store_true")
 
     parser.add_argument("--gpus")
     parser.add_argument("--fix-cudnn", default=False, action="store_true")

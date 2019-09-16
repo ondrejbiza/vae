@@ -23,7 +23,8 @@ class VQ_VAE(Model):
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides,
                  decoder_filters, decoder_filter_sizes, decoder_strides, num_embeddings, loss_type,
-                 weight_decay, learning_rate, beta1, beta2, lr_decay_val=None, lr_decay_steps=None, fix_cudnn=False):
+                 weight_decay, learning_rate, beta1, beta2, lr_decay_val=None, lr_decay_steps=None, fix_cudnn=False,
+                 mrsa_init=False):
 
         super(VQ_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
@@ -47,6 +48,12 @@ class VQ_VAE(Model):
         self.beta2 = beta2
         self.lr_decay_val = lr_decay_val
         self.lr_decay_steps = lr_decay_steps
+        self.mrsa_init = mrsa_init
+
+        if self.mrsa_init:
+            self.initializer = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode="FAN_IN", uniform=False)
+        else:
+            self.initializer = tf.truncated_normal_initializer(stddev=0.02)
 
         self.input_pl = None
         self.input_flat_t = None
@@ -117,6 +124,23 @@ class VQ_VAE(Model):
 
         return loss, output_loss, left_loss, reg_loss
 
+    def show_latent_space(self, samples):
+
+        p, e = self.session.run([self.pred_embeds, self.embeds], feed_dict={
+                self.input_pl: samples
+            }
+        )
+
+        p = np.reshape(p, (p.shape[0] * p.shape[1] * p.shape[2], p.shape[3]))
+        a = np.concatenate([e, p], axis=0)
+        l = np.concatenate([np.zeros(len(e)), np.ones(len(p))], axis=0)
+        from sklearn.decomposition import PCA
+        m = PCA(n_components=2)
+        x = m.fit_transform(a)
+        import matplotlib.pyplot as plt
+        plt.scatter(x[:, 0], x[:, 1], c=l)
+        plt.show()
+
     def build_all(self):
 
         self.build_placeholders()
@@ -162,7 +186,7 @@ class VQ_VAE(Model):
                         x, self.encoder_filters[idx], self.encoder_filter_sizes[idx], self.encoder_strides[idx],
                         padding="SAME", activation=tf.nn.relu,
                         kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
-                        kernel_initializer=tf.truncated_normal_initializer(stddev=0.02)
+                        kernel_initializer=self.initializer
                     )
 
         return x
@@ -194,7 +218,7 @@ class VQ_VAE(Model):
                         x, self.decoder_filters[idx], self.decoder_filter_sizes[idx], self.decoder_strides[idx],
                         padding="SAME", activation=tf.nn.relu if idx != len(self.decoder_filters) - 1 else None,
                         kernel_regularizer=utils.get_weight_regularizer(self.weight_decay),
-                        kernel_initializer=tf.random_normal_initializer(stddev=0.02)
+                        kernel_initializer=self.initializer
                     )
 
         logits_t = tf.nn.sigmoid(x)
@@ -256,7 +280,9 @@ class VQ_VAE(Model):
             self.global_step = tf.train.get_or_create_global_step()
 
             if self.lr_decay_val is not None and self.lr_decay_steps is not None:
-                learning_rate = tf.train.exponential_decay(self.learning_rate, self.global_step, self.lr_decay_steps, self.lr_decay_val)
+                learning_rate = tf.train.exponential_decay(
+                    self.learning_rate, self.global_step, self.lr_decay_steps, self.lr_decay_val
+                )
             else:
                 learning_rate = self.learning_rate
 
@@ -274,7 +300,3 @@ class VQ_VAE(Model):
             self.step_op = tf.train.AdamOptimizer(learning_rate=learning_rate).apply_gradients(
                 decoder_grads + encoder_grads + embed_grads, global_step=self.global_step
             )
-
-    def embedding_difference(self, predictions, actual):
-
-        return predictions[:, :, tf.newaxis, :] - actual[tf.newaxis, tf.newaxis, :, :]
