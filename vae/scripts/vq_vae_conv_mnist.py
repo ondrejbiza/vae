@@ -30,7 +30,7 @@ def main(args):
     # in all fully-connected and convolutional layers
     model = vq_vae_conv.VQ_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
-        args.latent_size, args.num_embeddings, args.embedding_size, vq_vae_conv.VQ_VAE.LossType.L2,
+        args.latent_size, args.num_embeddings, args.embedding_size, vq_vae_conv.VQ_VAE.LossType.L2_WITH_SIGMOID,
         args.weight_decay, args.lr, args.beta1, args.beta2, lr_decay_val=args.lr_decay_val,
         lr_decay_steps=args.lr_decay_steps, fix_cudnn=args.fix_cudnn
     )

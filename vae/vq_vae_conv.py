@@ -20,6 +20,7 @@ class VQ_VAE(Model):
 
         SIGMOID_CROSS_ENTROPY = 1
         L2 = 2
+        L2_WITH_SIGMOID = 3
 
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_size,
@@ -242,14 +243,17 @@ class VQ_VAE(Model):
                         kernel_initializer=self.initializer
                     )
 
-        logits_t = tf.nn.sigmoid(x)
-        flat_logits_t = tf.layers.flatten(logits_t)
-        output_t = logits_t
+        logits_t = x
 
-        #if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
-        #    output_t = tf.nn.sigmoid(logits_t)
-        #else:
-        #   output_t = logits_t
+        if self.loss_type == self.LossType.SIGMOID_CROSS_ENTROPY:
+            output_t = tf.nn.sigmoid(logits_t)
+        elif self.loss_type == self.LossType.L2:
+            output_t = logits_t
+        else:
+            logits_t = tf.nn.sigmoid(logits_t)
+            output_t = logits_t
+
+        flat_logits_t = tf.layers.flatten(logits_t)
 
         return logits_t, flat_logits_t, output_t
 
@@ -266,15 +270,6 @@ class VQ_VAE(Model):
                     axis=1
                 )
             else:
-                """
-                self.full_output_loss_t = tf.reduce_mean(
-                    tf.losses.mean_squared_error(
-                        labels=self.input_flat_t, predictions=self.flat_logits_t,
-                        reduction=tf.losses.Reduction.NONE
-                    ),
-                    axis=1
-                )
-                """
                 self.full_output_loss_t = tf.reduce_mean(
                     tf.square((self.input_flat_t - self.flat_logits_t)), axis=1
                 )
