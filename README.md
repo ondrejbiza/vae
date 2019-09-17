@@ -74,6 +74,22 @@ Paper: https://arxiv.org/abs/1611.01144
 
 MNIST, default settings: -81.56 test log-likelihood (1 run)
 
+### Vector Quantization VAE (VQ-VAE):
+
+More or less a 1-on-1 copy of https://github.com/hiwonjoon/tf-vqvae/blob/master/model.py:
+```
+python -m vae.scripts.vq_vae_fully_conv_mnist
+```
+
+My own version that seems to produce better samples:
+```
+python -m vae.scripts.vq_vae_conv_mnist
+```
+
+Paper: https://arxiv.org/abs/1711.00937
+
+I'm not sure how to measure the test log-likelihood here.
+
 ## Notes
 
 * The architecture of all ConvNets is based on this paper (https://arxiv.org/abs/1803.10122) with half the filters.

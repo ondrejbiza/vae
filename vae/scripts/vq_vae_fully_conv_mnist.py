@@ -92,7 +92,7 @@ def main(args):
     test_lls = model.get_log_likelihood(eval_data)
     model.stop_session()
 
-    print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
+    #print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
 
     # plot samples
     print("sample classes:", classes)
