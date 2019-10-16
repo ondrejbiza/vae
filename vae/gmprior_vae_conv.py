@@ -77,16 +77,25 @@ class GMPRIOR_VAE(Model):
 
     def predict(self, num_samples):
 
-        mixtures_mu, mixtures_var = self.session.run([self.mixtures_mu_v, self.mixtures_var_t])
+        mixtures_mu, mixtures_var = self.get_mixtures()
         assignments = np.random.randint(0, self.num_components, size=num_samples)
 
         flat_outputs = self.session.run(self.output_t, feed_dict={
             self.mu_t: mixtures_mu[assignments],
-            self.sd_t: np.sqrt(mixtures_var[assignments])
+            self.var_t: np.sqrt(mixtures_var[assignments])
 
         })
 
         return flat_outputs, mixtures_mu
+
+    def predict_x_from_mixture(self, mu, var, num_samples):
+
+        flat_outputs = self.session.run(self.output_t, feed_dict={
+            self.mu_t: np.tile(mu[np.newaxis, :], [num_samples, 1]),
+            self.var_t: np.tile(var[np.newaxis, :], [num_samples, 1])
+        })
+
+        return flat_outputs
 
     def train(self, samples):
 

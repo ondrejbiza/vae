@@ -64,7 +64,6 @@ def main(args):
     samples, _ = model.predict(25)
     samples = samples[:, :, :, 0]
     test_lls = model.get_log_likelihood(eval_data)
-    model.stop_session()
 
     print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
 
@@ -80,6 +79,22 @@ def main(args):
 
     plt.show()
 
+    # plot samples by mixture
+    mixtures_mu, mixtures_var = model.get_mixtures()
+    _, axes = plt.subplots(nrows=len(mixtures_mu), ncols=10)
+
+    for m_idx in range(len(mixtures_mu)):
+        x_sample = model.predict_x_from_mixture(mixtures_mu[m_idx], mixtures_var[m_idx], 10)
+        for s_idx in range(10):
+            idx = m_idx * len(mixtures_mu) + s_idx
+
+            axis = axes[idx // len(mixtures_mu), idx % len(mixtures_mu)]
+
+            axis.imshow(x_sample[s_idx, :, :, 0], vmin=0, vmax=1, cmap="gray")
+            axis.axis("off")
+
+    plt.show()
+
     # plot losses
     for key, value in losses.items():
         plt.plot(list(range(1, len(value) + 1)), value, label=key)
@@ -87,6 +102,8 @@ def main(args):
     plt.legend()
     plt.xlabel("epoch")
     plt.show()
+
+    model.stop_session()
 
 
 if __name__ == "__main__":

@@ -24,8 +24,8 @@ def main(args):
     # in all fully-connected and convolutional layers
     model = gm_vae_conv.GM_VAE(
         [28, 28], [16, 32, 64], [6, 6, 4], [1, 1, 2], [500], [500], [64, 32, 16, 1], [4, 6, 6, 1], [2, 2, 2, 1],
-        [500], 10, 200, 150, gm_vae_conv.GM_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        clip_z_prior=args.clip_z_prior
+        [500], args.num_components, 200, 150, gm_vae_conv.GM_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay,
+        args.learning_rate, clip_z_prior=args.clip_z_prior
     )
 
     model.build_all()
@@ -119,6 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=50)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--clip-z-prior", type=float, default=None)
+    parser.add_argument("--num-components", type=int, default=10)
 
     parser.add_argument("--gpus", default=None)
     parser.add_argument("--gpu-memory-fraction", default=None, type=float)
