@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 import tensorflow as tf
-from ..gmprior_vae_conv import GMPRIOR_VAE
+from ..potential_prior_vae_conv import POTENTIAL_PRIOR_VAE
 
 
 def main(args):
@@ -20,10 +20,11 @@ def main(args):
     train_data, train_labels = shuffle(train_data, train_labels)
     eval_data, eval_labels = shuffle(eval_data, eval_labels)
 
-    model = GMPRIOR_VAE(
+    model = POTENTIAL_PRIOR_VAE(
         [28, 28], [16, 32, 64, 128], [4, 4, 4, 4], [2, 2, 2, 1], [], [512], [64, 32, 16, 1], [4, 5, 5, 4], [2, 2, 2, 1],
-        args.latent_space_size, GMPRIOR_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.weight_decay, args.learning_rate,
-        args.num_components, beta1=1.0, beta2=1.0, fix_cudnn=args.fix_cudnn
+        args.latent_space_size, POTENTIAL_PRIOR_VAE.LossType.SIGMOID_CROSS_ENTROPY, args.prior_type, args.weight_decay,
+        args.learning_rate, args.num_components, beta1=args.beta1, beta2=args.beta2, tau=args.tau,
+        fix_cudnn=args.fix_cudnn
     )
 
     model.start_session()
@@ -48,49 +49,53 @@ def main(args):
             losses["entropy loss"].append(np.mean(epoch_losses["entropy loss"]))
             losses["prior loss"].append(np.mean(epoch_losses["prior loss"]))
             losses["regularization"].append(np.mean(epoch_losses["regularization"]))
+            losses["mu norms"].append(np.mean(epoch_losses["mu norms"]))
+            losses["mixture mu norms"].append(np.mean(epoch_losses["mixture mu norms"]))
 
             epoch_losses = collections.defaultdict(list)
 
         samples = train_data[epoch_step * batch_size: (epoch_step + 1) * batch_size]
 
-        loss, output_loss, entropy_loss, prior_loss, reg_loss = model.train(samples)
+        loss, output_loss, entropy_loss, prior_loss, reg_loss, n1, n2 = model.train(samples)
+
+        #print(loss, output_loss, entropy_loss, prior_loss)
 
         epoch_losses["total"].append(loss)
         epoch_losses["output"].append(output_loss)
         epoch_losses["entropy loss"].append(entropy_loss)
         epoch_losses["prior loss"].append(prior_loss)
         epoch_losses["regularization"].append(reg_loss)
+        epoch_losses["mu norms"].append(n1)
+        epoch_losses["mixture mu norms"].append(n2)
 
-    samples, _ = model.predict(25)
-    samples = samples[:, :, :, 0]
     test_lls = model.get_log_likelihood(eval_data)
 
     print("test negative log-likelihood: {:.2f}".format(np.mean(test_lls)))
 
     # plot samples
-    _, axes = plt.subplots(nrows=5, ncols=5)
+    images = train_data[:args.num_components * 5]
+    potentials = model.session.run(model.sample_potential_t, feed_dict={
+        model.input_pl: images
+    })
+    assignment = np.argmax(potentials, axis=1)
+    _, counts = np.unique(assignment, return_counts=True)
+    max_images = np.max(counts)
 
-    for i in range(25):
+    print("max images", max_images)
 
-        axis = axes[i // 5, i % 5]
+    _, axes = plt.subplots(nrows=args.num_components, ncols=max_images)
 
-        axis.imshow(samples[i], vmin=0, vmax=1, cmap="gray")
-        axis.axis("off")
+    for i in range(args.num_components):
+        mask = assignment == i
+        print("component {:d}, {:d} elements".format(i + 1, np.sum(mask)))
+        if np.any(mask):
+            for j, image in enumerate(images[mask]):
+                axis = axes[i, j]
+                axis.imshow(image, vmin=0, vmax=1, cmap="gray")
+                axis.axis("off")
 
-    plt.show()
-
-    # plot samples by mixture
-    mixtures_mu, mixtures_var = model.get_mixtures()
-    _, axes = plt.subplots(nrows=len(mixtures_mu), ncols=10)
-
-    for m_idx in range(len(mixtures_mu)):
-        x_sample = model.predict_x_from_mixture(mixtures_mu[m_idx], mixtures_var[m_idx], 10)
-        for s_idx in range(10):
-            idx = m_idx * len(mixtures_mu) + s_idx
-
-            axis = axes[idx // len(mixtures_mu), idx % len(mixtures_mu)]
-
-            axis.imshow(x_sample[s_idx, :, :, 0], vmin=0, vmax=1, cmap="gray")
+        for j in range(int(np.sum(mask)), max_images):
+            axis = axes[i, j]
             axis.axis("off")
 
     plt.show()
@@ -115,6 +120,10 @@ if __name__ == "__main__":
     parser.add_argument("--weight-decay", type=float, default=0.0005)
     parser.add_argument("--num-components", type=int, default=100)
     parser.add_argument("--latent-space-size", type=int, default=32)
+    parser.add_argument("--prior-type", type=int, default=0, help="1: exp tanh, 2: exp cosine sim")
+    parser.add_argument("--tau", type=float, default=1.0)
+    parser.add_argument("--beta1", type=float, default=1.0)
+    parser.add_argument("--beta2", type=float, default=1.0)
 
     parser.add_argument("--fix-cudnn", default=False, action="store_true")
     parser.add_argument("--gpus")
