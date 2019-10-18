@@ -5,7 +5,7 @@ from . import utils
 from .model import Model
 
 
-class GMPRIOR_VAE(Model):
+class POTENTIAL_PRIOR_VAE(Model):
 
     MODEL_NAMESPACE = "model"
     TRAINING_NAMESPACE = "training"
@@ -15,11 +15,17 @@ class GMPRIOR_VAE(Model):
         SIGMOID_CROSS_ENTROPY = 1
         L2 = 2
 
+    class PriorType(Enum):
+
+        EXP_TANH = 1
+        EXP_COSINE_SIM = 2
+
     def __init__(self, input_shape, encoder_filters, encoder_filter_sizes, encoder_strides, encoder_neurons,
                  decoder_neurons, decoder_filters, decoder_filter_sizes, decoder_strides, latent_space_size, loss_type,
-                 weight_decay, learning_rate, num_components, beta1=1.0, beta2=1.0, fix_cudnn=False):
+                 prior_type, weight_decay, learning_rate, num_components, beta1=1.0, beta2=1.0, tau=1.0,
+                 fix_cudnn=False):
 
-        super(GMPRIOR_VAE, self).__init__(fix_cudnn=fix_cudnn)
+        super(POTENTIAL_PRIOR_VAE, self).__init__(fix_cudnn=fix_cudnn)
 
         assert loss_type in self.LossType
 
@@ -35,11 +41,13 @@ class GMPRIOR_VAE(Model):
         self.decoder_strides = decoder_strides
         self.latent_space_size = latent_space_size
         self.loss_type = loss_type
+        self.prior_type = prior_type
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.num_components = num_components
         self.beta1 = beta1
         self.beta2 = beta2
+        self.tau = tau
 
         self.input_pl = None
         self.input_flat_t = None
@@ -49,11 +57,9 @@ class GMPRIOR_VAE(Model):
         self.var_t = None
         self.mean_sq_t = None
         self.mixtures_mu_v = None
-        self.mixtures_var_t = None
-        self.mixtures_logvar_v = None
         self.encoder_entropy_t = None
         self.pseudo_expectation_t = None
-        self.sample_probs_t = None
+        self.sample_potential_t = None
         self.entropy_loss_t = None
         self.prior_loss_t = None
         self.reg_loss_t = None
@@ -77,13 +83,12 @@ class GMPRIOR_VAE(Model):
 
     def predict(self, num_samples):
 
-        mixtures_mu, mixtures_var = self.get_mixtures()
+        mixtures_mu = self.get_mixtures()
         assignments = np.random.randint(0, self.num_components, size=num_samples)
 
         flat_outputs = self.session.run(self.output_t, feed_dict={
             self.mu_t: mixtures_mu[assignments],
-            self.var_t: np.sqrt(mixtures_var[assignments])
-
+            self.var_t: np.ones_like(mixtures_mu[assignments]) * 0.1
         })
 
         return flat_outputs, mixtures_mu
@@ -99,19 +104,19 @@ class GMPRIOR_VAE(Model):
 
     def train(self, samples):
 
-        _, loss, output_loss, entropy_loss, prior_loss, reg_loss, sp = self.session.run(
+        _, loss, output_loss, entropy_loss, prior_loss, reg_loss, sp, n1, n2 = self.session.run(
             [self.step_op, self.loss_t, self.output_loss_t, self.entropy_loss_t, self.prior_loss_t, self.reg_loss_t,
-             self.sample_probs_t],
+             self.sample_potential_t, self.mu_norms_t, self.mixtures_mu_norms_t],
             feed_dict={
                 self.input_pl: samples
             }
         )
 
-        return loss, output_loss, entropy_loss, prior_loss, reg_loss
+        return loss, output_loss, entropy_loss, prior_loss, reg_loss, n1, n2
 
     def get_mixtures(self):
 
-        return self.session.run([self.mixtures_mu_v, self.mixtures_var_t])
+        return np.transpose(self.session.run(self.mixtures_mu_v))
 
     def build_placeholders(self):
 
@@ -198,15 +203,11 @@ class GMPRIOR_VAE(Model):
 
             # mixtures
             self.mixtures_mu_v = tf.get_variable(
-                "mixtures_mu", initializer=tf.random_normal_initializer(
-                    mean=0.0, stddev=0.1, dtype=tf.float32
-                ), shape=(self.num_components, self.latent_space_size)
+                "mixtures_mu", shape=(self.latent_space_size, self.num_components)
             )
-            self.mixtures_logvar_v = tf.get_variable(
-                "mixtures_var", initializer=tf.random_normal_initializer(
-                    mean=-1.0, stddev=0.1, dtype=tf.float32
-                ), shape=(self.num_components, self.latent_space_size)
-            )
+
+            self.mu_norms_t = tf.reduce_mean(tf.square(tf.norm(self.mu_t, ord=2, axis=1)))
+            self.mixtures_mu_norms_t = tf.reduce_mean(tf.square(tf.norm(self.mixtures_mu_v, ord=2, axis=0)))
 
             # middle
             with tf.variable_scope("middle"):
@@ -228,17 +229,12 @@ class GMPRIOR_VAE(Model):
                     (self.latent_space_size / 2) * (1 + np.log(2 * np.pi))
 
                 # calculate prior expectation
-                self.mixtures_var_t = tf.exp(self.mixtures_logvar_v)
+                if self.prior_type is self.PriorType.EXP_TANH:
+                    self.sample_potential_t = self.prior_exp_tanh(self.sample_t, self.mixtures_mu_v)
+                else:
+                    self.sample_potential_t = self.prior_exp_cosine_similarity(self.sample_t, self.mixtures_mu_v)
 
-                self.sample_probs_t = utils.many_multivariate_normals_log_pdf(
-                    self.sample_t, self.mixtures_mu_v, self.mixtures_var_t, self.mixtures_logvar_v
-                )
-                self.sample_probs_t -= np.log(self.num_components)
-
-                d_max = tf.reduce_max(self.sample_probs_t, axis=1)
-                self.pseudo_expectation_t = d_max + tf.log(
-                    tf.reduce_sum(tf.exp(self.sample_probs_t - d_max[:, tf.newaxis]), axis=1)
-                )
+                self.pseudo_expectation_t = tf.log(tf.reduce_sum(self.sample_potential_t, axis=1))
 
             # decoder
             self.logits_t, self.flat_logits_t, self.output_t = self.build_decoder(self.sample_t)
@@ -281,3 +277,24 @@ class GMPRIOR_VAE(Model):
                 self.reg_loss_t
 
             self.step_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_t)
+
+    def prior_exp_tanh(self, x, mu):
+
+        output = tf.matmul(x, mu)
+        output = tf.nn.tanh(output)
+        output = tf.exp(output / self.tau)
+
+        return output
+
+    def prior_exp_cosine_similarity(self, x, mu):
+
+        norm_x = tf.norm(x, ord=2, axis=1)
+        norm_mu = tf.norm(mu, ord=2, axis=0)
+
+        x_div = x / norm_x[:, tf.newaxis]
+        mu_div = mu / norm_mu[tf.newaxis, :]
+
+        output = tf.matmul(x_div, mu_div)
+        output = tf.exp(output / self.tau)
+
+        return output
